@@ -110,7 +110,60 @@
     if (typeof s.ink === "string") state.ink = s.ink;
   }
 
+  // Kacheln statt Auswahllisten: zeigen jede Schrift bzw. jedes Papier als kleine Vorschau
+  function buildTiles() {
+    const fontGrid = $("fontGrid");
+    for (const opt of els.font.options) {
+      const custom = opt.value === CUSTOM;
+      const m = opt.textContent.match(/^(.*?)\s*\((.*)\)$/);
+      const name = custom ? "Meine Handschrift" : (m ? m[1] : opt.textContent);
+      const desc = custom ? "selbst geschrieben" : (m ? m[2] : "");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tile" + (custom ? " custom" : "");
+      b.dataset.value = opt.value;
+      b.setAttribute("aria-label", `${name} (${desc})`);
+      const sample = document.createElement("span");
+      sample.className = "font-sample";
+      sample.textContent = custom ? "✍️ Meine" : "Handschrift";
+      if (!custom) sample.style.fontFamily = `"${opt.value}", cursive`;
+      const n = document.createElement("span");
+      n.className = "tile-name";
+      n.textContent = name;
+      const d = document.createElement("span");
+      d.className = "tile-desc";
+      d.textContent = desc;
+      b.append(sample, n, d);
+      b.addEventListener("click", () => {
+        if (custom && !(window.Handschrift && window.Handschrift.count())) {
+          window.Handschrift.open();
+          return;
+        }
+        els.font.value = opt.value;
+        els.font.dispatchEvent(new Event("change"));
+      });
+      fontGrid.appendChild(b);
+    }
+
+    const paperGrid = $("paperGrid");
+    for (const opt of els.paper.options) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tile paper-tile";
+      b.dataset.value = opt.value;
+      b.innerHTML = `<span class="paper-swatch ${opt.value}"></span><span class="tile-name"></span>`;
+      b.querySelector(".tile-name").textContent = opt.textContent;
+      b.addEventListener("click", () => {
+        els.paper.value = opt.value;
+        els.paper.dispatchEvent(new Event("change"));
+      });
+      paperGrid.appendChild(b);
+    }
+  }
+
   function updateOutputs() {
+    for (const t of $("fontGrid").children) t.classList.toggle("active", t.dataset.value === els.font.value);
+    for (const t of $("paperGrid").children) t.classList.toggle("active", t.dataset.value === els.paper.value);
     $("sizeOut").textContent = els.size.value + " px";
     $("lineOut").textContent = els.line.value + " px";
     $("messOut").textContent = els.mess.value;
@@ -691,6 +744,7 @@
   // ---------- Events ----------
 
   function init() {
+    buildTiles();
     load();
     updateOutputs();
 

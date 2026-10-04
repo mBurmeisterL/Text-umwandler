@@ -6,7 +6,7 @@
   <title>Text-Umwandler – Text in Handschrift</title>
   <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -17,149 +17,163 @@
 </head>
 <body>
   <header class="topbar">
-    <h1><span class="logo">✍️</span> Text-Umwandler</h1>
-    <p>Getippten Text in Handschrift verwandeln</p>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      </span>
+      <div>
+        <h1 class="brand-title">Text-Umwandler</h1>
+        <p class="brand-sub">Getippter Text wird zu echter Handschrift</p>
+      </div>
+    </div>
   </header>
 
   <main class="layout">
-    <section class="panel" aria-label="Einstellungen">
-      <label class="field">
-        <span>Dein Text</span>
-        <textarea id="text" rows="10" spellcheck="true"></textarea>
-      </label>
+    <aside class="panel" aria-label="Einstellungen">
+      <section class="card">
+        <h2 class="card-title"><span class="step">1</span> Dein Text</h2>
+        <textarea id="text" rows="9" spellcheck="true" aria-label="Dein Text" placeholder="Schreib oder füge hier deinen Text ein …"></textarea>
 
-      <details class="ai-box" id="aiBox">
-        <summary>🤖 KI-Helfer</summary>
-        <div class="ai-body">
-          <textarea id="aiPrompt" rows="3" placeholder="z. B. Schreib einen Dankesbrief an Oma für das Geburtstagsgeschenk"></textarea>
-          <div class="ai-actions">
-            <button type="button" id="aiWrite" class="primary">✨ Text schreiben</button>
-            <button type="button" id="aiRewrite">✏️ Text überarbeiten</button>
-            <button type="button" id="aiCorrect">✔️ Rechtschreibung prüfen</button>
-            <label class="file-btn" id="aiOcrBtn">📷 Handschrift abtippen<input type="file" id="aiOcr" accept="image/*,application/pdf,.pdf"></label>
-            <button type="button" id="aiUndo" hidden>↶ Rückgängig</button>
-          </div>
-          <p class="hint" id="aiStatus" role="status"></p>
-          <details class="ai-settings" id="aiSettings">
-            <summary>⚙️ KI-Einstellungen</summary>
-            <label class="field">
-              <span>KI-Anbieter</span>
-              <select id="aiProvider">
-                <option value="gemini">Google Gemini</option>
-                <option value="claude">Anthropic Claude</option>
-                <option value="cloudflare">Eigener Cloudflare Worker (ohne Schlüssel)</option>
-              </select>
-            </label>
-            <label class="field">
-              <span id="aiKeyLabel">API-Schlüssel</span>
-              <input type="password" id="aiKey" autocomplete="off" spellcheck="false">
-            </label>
+        <details class="ai-box" id="aiBox">
+          <summary>🤖 KI-Helfer</summary>
+          <div class="ai-body">
+            <textarea id="aiPrompt" rows="3" placeholder="z. B. Schreib einen Dankesbrief an Oma für das Geburtstagsgeschenk"></textarea>
             <div class="ai-actions">
-              <button type="button" id="aiKeySave">Speichern</button>
-              <button type="button" id="aiKeyDelete">Löschen</button>
-              <button type="button" id="aiTest">🔌 Verbindung testen</button>
+              <button type="button" id="aiWrite" class="primary">✨ Text schreiben</button>
+              <button type="button" id="aiRewrite">✏️ Text überarbeiten</button>
+              <button type="button" id="aiCorrect">✔️ Rechtschreibung prüfen</button>
+              <label class="file-btn" id="aiOcrBtn">📷 Handschrift abtippen<input type="file" id="aiOcr" accept="image/*,application/pdf,.pdf"></label>
+              <button type="button" id="aiUndo" hidden>↶ Rückgängig</button>
             </div>
-            <label class="field" id="aiModelField">
-              <span>Gemini-Modell</span>
-              <select id="aiModel">
-                <option value="">Automatisch (neuestes Flash-Modell)</option>
-              </select>
+            <p class="hint" id="aiStatus" role="status"></p>
+            <details class="ai-settings" id="aiSettings">
+              <summary>⚙️ KI-Einstellungen</summary>
+              <label class="field">
+                <span>KI-Anbieter</span>
+                <select id="aiProvider">
+                  <option value="gemini">Google Gemini</option>
+                  <option value="claude">Anthropic Claude</option>
+                  <option value="cloudflare">Eigener Cloudflare Worker (ohne Schlüssel)</option>
+                </select>
+              </label>
+              <label class="field">
+                <span id="aiKeyLabel">API-Schlüssel</span>
+                <input type="password" id="aiKey" autocomplete="off" spellcheck="false">
+              </label>
+              <div class="ai-actions">
+                <button type="button" id="aiKeySave">Speichern</button>
+                <button type="button" id="aiKeyDelete">Löschen</button>
+                <button type="button" id="aiTest">🔌 Verbindung testen</button>
+              </div>
+              <label class="field" id="aiModelField">
+                <span>Gemini-Modell</span>
+                <select id="aiModel">
+                  <option value="">Automatisch (neuestes Flash-Modell)</option>
+                </select>
+              </label>
+              <p class="hint" id="aiKeyHint"></p>
+            </details>
+          </div>
+        </details>
+
+      </section>
+
+      <section class="card">
+        <h2 class="card-title"><span class="step">2</span> Schrift</h2>
+        <div class="tile-grid font-grid" id="fontGrid" role="group" aria-label="Schriftart"></div>
+        <select id="font" class="sr-only" tabindex="-1" aria-hidden="true">
+          <option value="__custom__">Meine Handschrift (eigene)</option>
+          <option value="Caveat" selected>Caveat (locker)</option>
+          <option value="Kalam">Kalam (ordentlich)</option>
+          <option value="Indie Flower">Indie Flower (rund)</option>
+          <option value="Shadows Into Light">Shadows Into Light (schmal)</option>
+          <option value="Gloria Hallelujah">Gloria Hallelujah (verspielt)</option>
+          <option value="Reenie Beanie">Reenie Beanie (schnell)</option>
+          <option value="Nothing You Could Do">Nothing You Could Do (krakelig)</option>
+          <option value="Dancing Script">Dancing Script (Schreibschrift)</option>
+          <option value="Homemade Apple">Homemade Apple (Schreibschrift)</option>
+        </select>
+
+        <button type="button" id="openEditor" class="editor-btn">✍️ Eigene Handschrift zeichnen oder einlesen</button>
+
+        <div class="field">
+          <span>Tintenfarbe</span>
+          <div class="swatches" id="swatches">
+            <button type="button" data-color="#1d3a8a" style="--c:#1d3a8a" aria-label="Königsblau" title="Königsblau"></button>
+            <button type="button" data-color="#0f1b3d" style="--c:#0f1b3d" aria-label="Dunkelblau" title="Dunkelblau"></button>
+            <button type="button" data-color="#1a1a1a" style="--c:#1a1a1a" aria-label="Schwarz" title="Schwarz"></button>
+            <button type="button" data-color="#b3261e" style="--c:#b3261e" aria-label="Rot" title="Rot"></button>
+            <button type="button" data-color="#1f6b3a" style="--c:#1f6b3a" aria-label="Grün" title="Grün"></button>
+            <label class="custom-color" aria-label="Eigene Farbe" title="Eigene Farbe">
+              <input type="color" id="color" value="#1d3a8a">
             </label>
-            <p class="hint" id="aiKeyHint"></p>
-          </details>
+          </div>
         </div>
-      </details>
+      </section>
 
-      <div class="grid">
-        <label class="field">
-          <span>Schriftart</span>
-          <select id="font">
-            <option value="__custom__">✍️ Meine Handschrift</option>
-            <option value="Caveat" selected>Caveat (locker)</option>
-            <option value="Kalam">Kalam (ordentlich)</option>
-            <option value="Indie Flower">Indie Flower (rund)</option>
-            <option value="Shadows Into Light">Shadows Into Light (schmal)</option>
-            <option value="Gloria Hallelujah">Gloria Hallelujah (verspielt)</option>
-            <option value="Reenie Beanie">Reenie Beanie (schnell)</option>
-            <option value="Nothing You Could Do">Nothing You Could Do (krakelig)</option>
-            <option value="Dancing Script">Dancing Script (Schreibschrift)</option>
-            <option value="Homemade Apple">Homemade Apple (Schreibschrift)</option>
-          </select>
+      <section class="card">
+        <h2 class="card-title"><span class="step">3</span> Papier &amp; Aussehen</h2>
+        <div class="tile-grid paper-grid" id="paperGrid" role="group" aria-label="Papier"></div>
+        <select id="paper" class="sr-only" tabindex="-1" aria-hidden="true">
+          <option value="lined">Liniert</option>
+          <option value="grid">Kariert</option>
+          <option value="blank">Blanko</option>
+          <option value="old">Altes Papier</option>
+        </select>
+
+        <label class="field range">
+          <span>Schriftgröße <output id="sizeOut"></output></span>
+          <input type="range" id="size" min="24" max="80" step="1" value="46">
         </label>
 
-        <label class="field">
-          <span>Papier</span>
-          <select id="paper">
-            <option value="lined">Liniert</option>
-            <option value="grid">Kariert</option>
-            <option value="blank">Blanko</option>
-            <option value="old">Altes Papier</option>
-          </select>
+        <label class="field range">
+          <span>Unordentlichkeit <output id="messOut"></output></span>
+          <input type="range" id="mess" min="0" max="10" step="1" value="4">
         </label>
-      </div>
 
-      <button type="button" id="openEditor" class="editor-btn">✍️ Eigene Handschrift zeichnen</button>
+        <details class="more">
+          <summary>Feinabstimmung</summary>
+          <div class="more-body">
+            <label class="field range" id="penField">
+              <span>Stiftstärke <output id="penOut"></output></span>
+              <input type="range" id="pen" min="2" max="10" step="0.5" value="5">
+            </label>
 
-      <div class="field">
-        <span>Tintenfarbe</span>
-        <div class="swatches" id="swatches">
-          <button type="button" data-color="#1d3a8a" style="--c:#1d3a8a" aria-label="Königsblau"></button>
-          <button type="button" data-color="#0f1b3d" style="--c:#0f1b3d" aria-label="Dunkelblau"></button>
-          <button type="button" data-color="#1a1a1a" style="--c:#1a1a1a" aria-label="Schwarz"></button>
-          <button type="button" data-color="#b3261e" style="--c:#b3261e" aria-label="Rot"></button>
-          <button type="button" data-color="#1f6b3a" style="--c:#1f6b3a" aria-label="Grün"></button>
-          <label class="custom-color" aria-label="Eigene Farbe">
-            <input type="color" id="color" value="#1d3a8a">
-          </label>
-        </div>
-      </div>
+            <label class="field range">
+              <span>Zeilenabstand <output id="lineOut"></output></span>
+              <input type="range" id="line" min="40" max="120" step="1" value="66">
+            </label>
 
-      <label class="field range">
-        <span>Schriftgröße <output id="sizeOut"></output></span>
-        <input type="range" id="size" min="24" max="80" step="1" value="46">
-      </label>
+            <label class="field range">
+              <span>Buchstabenabstand <output id="spacingOut"></output></span>
+              <input type="range" id="spacing" min="-4" max="10" step="0.5" value="0">
+            </label>
 
-      <label class="field range" id="penField">
-        <span>Stiftstärke <output id="penOut"></output></span>
-        <input type="range" id="pen" min="2" max="10" step="0.5" value="5">
-      </label>
+            <label class="field range">
+              <span>Wortabstand <output id="wordOut"></output></span>
+              <input type="range" id="word" min="0" max="40" step="1" value="8">
+            </label>
 
-      <label class="field range">
-        <span>Zeilenabstand <output id="lineOut"></output></span>
-        <input type="range" id="line" min="40" max="120" step="1" value="66">
-      </label>
-
-      <label class="field range">
-        <span>Unordentlichkeit <output id="messOut"></output></span>
-        <input type="range" id="mess" min="0" max="10" step="1" value="4">
-      </label>
-
-      <label class="field range">
-        <span>Buchstabenabstand <output id="spacingOut"></output></span>
-        <input type="range" id="spacing" min="-4" max="10" step="0.5" value="0">
-      </label>
-
-      <label class="field range">
-        <span>Wortabstand <output id="wordOut"></output></span>
-        <input type="range" id="word" min="0" max="40" step="1" value="8">
-      </label>
-
-      <label class="check">
-        <input type="checkbox" id="margin" checked>
-        <span>Randlinie anzeigen</span>
-      </label>
-
-      <div class="actions">
-        <button type="button" id="shuffle" class="secondary">🔀 Neu mischen</button>
-        <button type="button" id="png">🖼️ PNG</button>
-        <button type="button" id="pdf">📄 PDF</button>
-        <button type="button" id="print" class="secondary">🖨️ Drucken</button>
-        <button type="button" id="share" class="wide">📤 Teilen / an Goodnotes senden</button>
-      </div>
-      <p class="hint" id="status" role="status"></p>
-    </section>
+            <label class="check">
+              <input type="checkbox" id="margin" checked>
+              <span>Rote Randlinie anzeigen</span>
+            </label>
+          </div>
+        </details>
+      </section>
+    </aside>
 
     <section class="preview" aria-label="Vorschau">
+      <div class="toolbar">
+        <p class="toolbar-status" id="status" role="status"></p>
+        <div class="toolbar-actions">
+          <button type="button" id="shuffle" class="btn ghost" title="Neue zufällige Variante">🔀 <span>Neu mischen</span></button>
+          <button type="button" id="print" class="btn ghost" title="Drucken">🖨️ <span>Drucken</span></button>
+          <button type="button" id="png" class="btn ghost" title="Als Bild speichern">🖼️ <span>PNG</span></button>
+          <button type="button" id="pdf" class="btn ghost" title="Als PDF speichern">📄 <span>PDF</span></button>
+          <button type="button" id="share" class="btn primary" title="Teilen, z. B. an Goodnotes">📤 <span>Teilen<span class="long"> / Goodnotes</span></span></button>
+        </div>
+      </div>
       <div id="pages"></div>
     </section>
   </main>
@@ -268,6 +282,6 @@
   <script src="template.js?v=7" defer></script>
   <script src="ai.js?v=9" defer></script>
   <script src="scan.js?v=9" defer></script>
-  <script src="app.js?v=9" defer></script>
+  <script src="app.js?v=10" defer></script>
 </body>
 </html>
