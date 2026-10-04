@@ -1,0 +1,64 @@
+/* Handschrift-Fonts (Google Fonts, lokal eingebunden) */
+@font-face {
+  font-family: 'Caveat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(caveat.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(dancing-script.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Gloria Hallelujah';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(gloria-hallelujah.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Homemade Apple';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(homemade-apple.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Indie Flower';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(indie-flower.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Kalam';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(kalam.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Nothing You Could Do';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(nothing-you-could-do.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Reenie Beanie';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(reenie-beanie.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Shadows Into Light';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(shadows-into-light.woff2) format('woff2');
+}

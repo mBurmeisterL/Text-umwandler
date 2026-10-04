@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Text-Umwandler – Text in Handschrift</title>
+  <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
+  <link rel="stylesheet" href="fonts/fonts.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1><span class="logo">✍️</span> Text-Umwandler</h1>
+    <p>Getippten Text in Handschrift verwandeln</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel" aria-label="Einstellungen">
+      <label class="field">
+        <span>Dein Text</span>
+        <textarea id="text" rows="10" spellcheck="true"></textarea>
+      </label>
+
+      <div class="grid">
+        <label class="field">
+          <span>Schriftart</span>
+          <select id="font">
+            <option value="Caveat">Caveat (locker)</option>
+            <option value="Kalam">Kalam (ordentlich)</option>
+            <option value="Indie Flower">Indie Flower (rund)</option>
+            <option value="Shadows Into Light">Shadows Into Light (schmal)</option>
+            <option value="Gloria Hallelujah">Gloria Hallelujah (verspielt)</option>
+            <option value="Reenie Beanie">Reenie Beanie (schnell)</option>
+            <option value="Nothing You Could Do">Nothing You Could Do (krakelig)</option>
+            <option value="Dancing Script">Dancing Script (Schreibschrift)</option>
+            <option value="Homemade Apple">Homemade Apple (Schreibschrift)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Papier</span>
+          <select id="paper">
+            <option value="lined">Liniert</option>
+            <option value="grid">Kariert</option>
+            <option value="blank">Blanko</option>
+            <option value="old">Altes Papier</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="field">
+        <span>Tintenfarbe</span>
+        <div class="swatches" id="swatches">
+          <button type="button" data-color="#1d3a8a" style="--c:#1d3a8a" aria-label="Königsblau"></button>
+          <button type="button" data-color="#0f1b3d" style="--c:#0f1b3d" aria-label="Dunkelblau"></button>
+          <button type="button" data-color="#1a1a1a" style="--c:#1a1a1a" aria-label="Schwarz"></button>
+          <button type="button" data-color="#b3261e" style="--c:#b3261e" aria-label="Rot"></button>
+          <button type="button" data-color="#1f6b3a" style="--c:#1f6b3a" aria-label="Grün"></button>
+          <label class="custom-color" aria-label="Eigene Farbe">
+            <input type="color" id="color" value="#1d3a8a">
+          </label>
+        </div>
+      </div>
+
+      <label class="field range">
+        <span>Schriftgröße <output id="sizeOut"></output></span>
+        <input type="range" id="size" min="24" max="80" step="1" value="46">
+      </label>
+
+      <label class="field range">
+        <span>Zeilenabstand <output id="lineOut"></output></span>
+        <input type="range" id="line" min="40" max="120" step="1" value="66">
+      </label>
+
+      <label class="field range">
+        <span>Unordentlichkeit <output id="messOut"></output></span>
+        <input type="range" id="mess" min="0" max="10" step="1" value="4">
+      </label>
+
+      <label class="field range">
+        <span>Buchstabenabstand <output id="spacingOut"></output></span>
+        <input type="range" id="spacing" min="-4" max="10" step="0.5" value="0">
+      </label>
+
+      <label class="field range">
+        <span>Wortabstand <output id="wordOut"></output></span>
+        <input type="range" id="word" min="0" max="40" step="1" value="8">
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="margin" checked>
+        <span>Randlinie anzeigen</span>
+      </label>
+
+      <div class="actions">
+        <button type="button" id="shuffle" class="secondary">🔀 Neu mischen</button>
+        <button type="button" id="png">🖼️ PNG</button>
+        <button type="button" id="pdf">📄 PDF</button>
+        <button type="button" id="print" class="secondary">🖨️ Drucken</button>
+      </div>
+      <p class="hint" id="status" role="status"></p>
+    </section>
+
+    <section class="preview" aria-label="Vorschau">
+      <div id="pages"></div>
+    </section>
+  </main>
+
+  <script src="vendor/jspdf.umd.min.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
