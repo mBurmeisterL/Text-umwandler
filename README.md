@@ -2,6 +2,17 @@
 
 Eine kleine Webseite, die getippten Text in realistisch wirkende Handschrift verwandelt.
 
+## Aufbau
+
+Die Startseite ist ein **Hauptmenü** mit zwei Bereichen (oben jederzeit über die Leiste erreichbar):
+
+- **✍️ Handschrift** (`#/handschrift`) – der Handschrift-Umwandler (siehe unten)
+- **🌍 Übersetzen** (`#/uebersetzen`) – Text eintippen oder ein Foto/Bild hochladen; die KI liest den
+  Text aus dem Bild, übersetzt ihn in eine von 30 Sprachen (Ausgangssprache wird erkannt) und kann das
+  Ergebnis direkt an den Handschrift-Umwandler übergeben
+
+Die **⚙️ KI-Einstellungen** (oben rechts) gelten für beide Bereiche.
+
 ## Funktionen
 
 - **Eigene Handschrift:** Buchstaben direkt auf der Seite mit Apple Pencil, Finger oder Maus

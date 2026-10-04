@@ -372,8 +372,8 @@
   }
 
   const NO_KEY =
-    "Dafür braucht die Seite einen KI-Schlüssel: Tippe oben auf „Fertig“, öffne unter dem Textfeld " +
-    "„🤖 KI-Helfer → ⚙️ KI-Einstellungen“, trage deinen Schlüssel bzw. deine Worker-Adresse ein und teste die Verbindung. " +
+    "Dafür braucht die Seite die KI: Tippe oben auf „Fertig“, dann oben rechts auf „⚙️ KI-Einstellungen“, " +
+    "trage deinen Schlüssel bzw. deine Worker-Adresse ein und teste die Verbindung. " +
     "Danach hier nochmal hochladen.";
 
   function init() {
