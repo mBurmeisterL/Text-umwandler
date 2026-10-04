@@ -379,9 +379,14 @@
   function init() {
     // Ohne Schlüssel gar nicht erst die Dateiauswahl öffnen, sondern erklären, was fehlt
     $("aiScan").addEventListener("click", (e) => {
-      if (!window.HandschriftKI.hasKey()) {
+      const KI = window.HandschriftKI;
+      const say = H().sectionStatus("aiScanStatus", "aiScanBtn");
+      if (!KI.canReadPages()) {
         e.preventDefault();
-        H().sectionStatus("aiScanStatus", "aiScanBtn")(NO_KEY, "error");
+        say("Mit dem Cloudflare Worker lassen sich keine Handschrift-Seiten lesen. Nutze oben die Vorlage, oder wähle in den KI-Einstellungen Gemini bzw. Claude.", "error");
+      } else if (!KI.hasKey()) {
+        e.preventDefault();
+        say(NO_KEY, "error");
       }
     });
     $("aiScan").addEventListener("change", (e) => {

@@ -66,6 +66,18 @@ Als KI kann **Google Gemini** oder **Anthropic Claude** benutzt werden (Auswahl 
 - **Claude:** Schlüssel auf [console.anthropic.com](https://console.anthropic.com/settings/keys),
   Abrechnung pro Nutzung (meist wenige Cent pro Anfrage).
 
+- **Eigener Cloudflare Worker (ohne Schlüssel):** Workers AI im eigenen kostenlosen Cloudflare-Konto
+  (Tageskontingent). Kann Texte schreiben, überarbeiten und die Rechtschreibung prüfen, aber keine
+  Handschrift-Seiten lesen. Einrichtung:
+  1. In Cloudflare einen Worker anlegen und unter **Bindings** ein Binding vom Typ **Workers AI** mit
+     dem Namen `AI` hinzufügen.
+  2. Unter **Edit code** den kompletten Inhalt von [`cloudflare-worker/worker.js`](cloudflare-worker/worker.js)
+     einfügen und **Deploy** tippen.
+  3. Die Worker-Adresse (`https://….workers.dev`) auf der Webseite unter **KI-Einstellungen →
+     Eigener Cloudflare Worker** eintragen und **Verbindung testen**.
+
+  Der Worker nimmt nur Anfragen von `https://mburmeisterl.github.io` an.
+
 Funktionen:
 
 - **✨ Text schreiben** – beschreiben, was gebraucht wird („Dankesbrief an Oma für das Geschenk“),
