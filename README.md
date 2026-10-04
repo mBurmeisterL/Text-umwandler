@@ -67,8 +67,9 @@ Als KI kann **Google Gemini** oder **Anthropic Claude** benutzt werden (Auswahl 
   Abrechnung pro Nutzung (meist wenige Cent pro Anfrage).
 
 - **Eigener Cloudflare Worker (ohne Schlüssel):** Workers AI im eigenen kostenlosen Cloudflare-Konto
-  (Tageskontingent). Kann Texte schreiben, überarbeiten und die Rechtschreibung prüfen, aber keine
-  Handschrift-Seiten lesen. Einrichtung:
+  (Tageskontingent). Kann alle KI-Funktionen; beim Lesen von Handschrift sind Gemini und Claude aber
+  genauer. Für Bilder nutzt der Worker Mistral Small 3.1 bzw. Gemma 3 (Meta-Llama-Vision ist in der EU
+  lizenzrechtlich ausgeschlossen). Einrichtung:
   1. In Cloudflare einen Worker anlegen und unter **Bindings** ein Binding vom Typ **Workers AI** mit
      dem Namen `AI` hinzufügen.
   2. Unter **Edit code** den kompletten Inhalt von [`cloudflare-worker/worker.js`](cloudflare-worker/worker.js)
@@ -84,6 +85,8 @@ Funktionen:
   der Text erscheint direkt in Handschrift
 - **✏️ Text überarbeiten** – den vorhandenen Text nach Wunsch ändern lassen („kürzer und lustiger“)
 - **✔️ Rechtschreibung prüfen** – korrigiert nur Fehler und listet die Änderungen auf
+- **📷 Handschrift abtippen** – Foto oder PDF einer handgeschriebenen Seite hochladen, der Text erscheint
+  getippt im Textfeld (unleserliche Wörter als [?])
 - **↶ Rückgängig** – stellt den Text vor der letzten KI-Änderung wieder her
 
 Der Schlüssel wird nur im Browser gespeichert und direkt an den Anbieter geschickt – deshalb die

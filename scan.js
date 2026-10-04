@@ -373,7 +373,7 @@
 
   const NO_KEY =
     "Dafür braucht die Seite einen KI-Schlüssel: Tippe oben auf „Fertig“, öffne unter dem Textfeld " +
-    "„🤖 KI-Helfer → ⚙️ KI-Einstellungen“, füge deinen Gemini-Schlüssel ein und teste die Verbindung. " +
+    "„🤖 KI-Helfer → ⚙️ KI-Einstellungen“, trage deinen Schlüssel bzw. deine Worker-Adresse ein und teste die Verbindung. " +
     "Danach hier nochmal hochladen.";
 
   function init() {
@@ -381,10 +381,7 @@
     $("aiScan").addEventListener("click", (e) => {
       const KI = window.HandschriftKI;
       const say = H().sectionStatus("aiScanStatus", "aiScanBtn");
-      if (!KI.canReadPages()) {
-        e.preventDefault();
-        say("Mit dem Cloudflare Worker lassen sich keine Handschrift-Seiten lesen. Nutze oben die Vorlage, oder wähle in den KI-Einstellungen Gemini bzw. Claude.", "error");
-      } else if (!KI.hasKey()) {
+      if (!KI.hasKey()) {
         e.preventDefault();
         say(NO_KEY, "error");
       }
@@ -398,5 +395,5 @@
     $("aiReviewCancel").addEventListener("click", closeReview);
   }
 
-  window.HandschriftScan = { init, segment, scanFile };
+  window.HandschriftScan = { init, segment, scanFile, SHEET_MAX };
 })();
