@@ -6,7 +6,7 @@
   <title>Text-Umwandler – Text in Handschrift</title>
   <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=7">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -177,16 +177,18 @@
           <p>Vorlage in Goodnotes öffnen (oder ausdrucken), jedes Zeichen 3× hineinschreiben und die Seiten als Bild, PDF oder Foto hier hochladen – die Buchstaben werden automatisch ausgeschnitten.</p>
           <div class="hw-import-actions">
             <button type="button" id="hwTemplate">📄 Vorlage holen</button>
-            <label class="file-btn primary">📷 Ausgefüllte Seiten hochladen<input type="file" id="hwScan" accept="image/*,application/pdf,.pdf" multiple></label>
+            <label class="file-btn primary" id="hwScanBtn">📷 Ausgefüllte Seiten hochladen<input type="file" id="hwScan" accept="image/*,application/pdf,.pdf" multiple></label>
           </div>
+          <p class="scan-status" id="tplStatus" role="status" hidden></p>
         </section>
 
         <section class="hw-import">
           <strong>🤖 Mit KI: beliebige Seite lesen</strong>
           <p>Lade eine Seite hoch, die du ganz normal geschrieben hast. Die KI erkennt die einzelnen Buchstaben, danach kannst du alles prüfen. Klappt am besten mit Druckschrift (Buchstaben nicht verbunden) auf weißem Papier. Braucht einen API-Schlüssel für Gemini oder Claude (KI-Helfer → KI-Einstellungen).</p>
           <div class="hw-import-actions">
-            <label class="file-btn primary">🤖 Handschrift-Seite analysieren<input type="file" id="aiScan" accept="image/*,application/pdf,.pdf"></label>
+            <label class="file-btn primary" id="aiScanBtn">🤖 Handschrift-Seite analysieren<input type="file" id="aiScan" accept="image/*,application/pdf,.pdf"></label>
           </div>
+          <p class="scan-status" id="aiScanStatus" role="status" hidden></p>
         </section>
 
         <div class="hw-current">
@@ -261,9 +263,9 @@
   <script src="vendor/jspdf.umd.min.js" defer></script>
   <script src="vendor/anthropic/anthropic-sdk.min.js" defer></script>
   <script src="handwriting.js?v=5" defer></script>
-  <script src="template.js?v=5" defer></script>
+  <script src="template.js?v=7" defer></script>
   <script src="ai.js?v=7" defer></script>
-  <script src="scan.js?v=6" defer></script>
+  <script src="scan.js?v=7" defer></script>
   <script src="app.js?v=7" defer></script>
 </body>
 </html>

@@ -331,32 +331,32 @@
       .filter((r) => r.use && r.char)
       .map((r) => ({ ch: r.char, glyph: r.glyph }));
     closeReview();
-    if (!list.length) { H().setStatus("Keine Zeichen übernommen."); return; }
+    const say = H().sectionStatus("aiScanStatus", "aiScanBtn");
+    if (!list.length) { say("Keine Zeichen übernommen."); return; }
     const ok = H().importGlyphs(list);
     const chars = new Set(list.map((x) => x.ch)).size;
-    H().setStatus(ok
-      ? `${list.length} Zeichen (${chars} verschiedene) aus deiner Handschrift übernommen.`
-      : "Speicher voll – bitte „Sichern“ benutzen und alte Varianten löschen.");
+    if (ok) say(`✅ ${list.length} Zeichen (${chars} verschiedene) aus deiner Handschrift übernommen.`, "ok");
+    else say("Speicher voll – bitte „Sichern“ benutzen und alte Varianten löschen.", "error");
   }
 
   // ---------- Ablauf ----------
 
   async function scanFile(file) {
     const KI = window.HandschriftKI;
-    const status = H().setStatus;
+    const status = H().sectionStatus("aiScanStatus", "aiScanBtn");
     if (!KI.hasKey()) {
-      status("Für das Lesen beliebiger Seiten bitte zuerst im Hauptfenster unter „KI-Helfer → KI-Einstellungen“ einen API-Schlüssel eintragen.");
+      status(NO_KEY, "error");
       return;
     }
     try {
-      status("Lese Seite …");
+      status(`Lese ${file.name} …`, "busy");
       const pages = await window.HandschriftVorlage.fileToCanvases(file);
       const { canvas } = pages[0];
-      status("Suche Buchstaben auf der Seite …");
+      status("Suche Buchstaben auf der Seite …", "busy");
       await new Promise((r) => setTimeout(r, 30));
       const seg = segment(canvas);
-      if (!seg.items.length) { status("Auf der Seite wurde keine Schrift gefunden."); return; }
-      status(`${seg.items.length} Schriftstücke gefunden – die KI liest jetzt die Seite (das dauert etwas) …`);
+      if (!seg.items.length) { status("Auf der Seite wurde keine Schrift gefunden. Ist die Schrift dunkel genug und die Seite gut beleuchtet?", "error"); return; }
+      status(`${seg.items.length} Schriftstücke gefunden – die KI liest jetzt die Seite. Das kann bis zu einer Minute dauern …`, "busy");
       const labels = await KI.labelGlyphs(pageImage(seg), contactSheets(seg), lineSummary(seg), seg.items.length);
       const results = buildGlyphs(seg, labels);
       const recognized = results.filter((r) => r.char).length;
@@ -364,14 +364,26 @@
       if (recognized < results.length / 2) info += " Zusammenhängende Schreibschrift lässt sich schlecht in Buchstaben zerlegen – Druckschrift funktioniert besser.";
       if (seg.truncated) info += ` Es wurden nur die ersten ${MAX_ITEMS} Stücke ausgewertet.`;
       if (pages.length > 1) info += " Bei PDFs wird nur die erste Seite gelesen.";
-      status("");
+      status(`Fertig: ${info}`, "ok");
       showReview(results, info);
     } catch (e) {
-      status(KI.friendlyError(e));
+      status("❌ " + KI.friendlyError(e), "error");
     }
   }
 
+  const NO_KEY =
+    "Dafür braucht die Seite einen KI-Schlüssel: Tippe oben auf „Fertig“, öffne unter dem Textfeld " +
+    "„🤖 KI-Helfer → ⚙️ KI-Einstellungen“, füge deinen Gemini-Schlüssel ein und teste die Verbindung. " +
+    "Danach hier nochmal hochladen.";
+
   function init() {
+    // Ohne Schlüssel gar nicht erst die Dateiauswahl öffnen, sondern erklären, was fehlt
+    $("aiScan").addEventListener("click", (e) => {
+      if (!window.HandschriftKI.hasKey()) {
+        e.preventDefault();
+        H().sectionStatus("aiScanStatus", "aiScanBtn")(NO_KEY, "error");
+      }
+    });
     $("aiScan").addEventListener("change", (e) => {
       const f = e.target.files[0];
       e.target.value = "";
