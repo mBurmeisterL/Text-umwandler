@@ -90,6 +90,8 @@
   }
 
   function init() {
+    window.Diktat.attach({ button: $("trDictate"), textarea: els.source, select: $("trDictLang"), say });
+
     try {
       const t = localStorage.getItem(TARGET_KEY);
       if (t && [...els.target.options].some((o) => o.value === t)) els.target.value = t;

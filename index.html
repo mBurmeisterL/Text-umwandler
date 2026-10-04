@@ -5,8 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Text-Umwandler – Text in Handschrift</title>
   <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
+  <meta name="theme-color" content="#2446a6">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Umwandler">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=15">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -39,6 +47,14 @@
       <h2>Was möchtest du machen?</h2>
       <p>Wähle einen Bereich. Über das Menü oben kommst du jederzeit zurück.</p>
     </section>
+    <div class="install-tip" id="installTip" hidden>
+      <span class="install-icon" aria-hidden="true">📲</span>
+      <div>
+        <strong>Als App auf den Home-Bildschirm</strong>
+        <p>In Safari auf <b>Teilen</b> <span aria-hidden="true">(□↑)</span> tippen und <b>„Zum Home-Bildschirm“</b> wählen. Dann öffnet sich der Text-Umwandler wie eine App – auch ohne Internet (KI-Funktionen ausgenommen).</p>
+      </div>
+      <button type="button" class="install-close" id="installClose" aria-label="Hinweis ausblenden">✕</button>
+    </div>
     <div class="home-grid">
       <a class="home-card" href="#/handschrift">
         <span class="home-icon" aria-hidden="true">✍️</span>
@@ -60,6 +76,11 @@
       <section class="card">
         <h2 class="card-title"><span class="step">1</span> Dein Text</h2>
         <textarea id="text" rows="9" spellcheck="true" aria-label="Dein Text" placeholder="Schreib oder füge hier deinen Text ein …"></textarea>
+        <div class="text-tools">
+          <button type="button" id="textDictate" class="btn ghost">🎤 <span>Diktieren</span></button>
+          <select id="textDictLang" class="dict-lang" aria-label="Gesprochene Sprache"></select>
+          <p class="hint" id="textHint" role="status"></p>
+        </div>
 
         <details class="ai-box" id="aiBox">
           <summary>🤖 KI-Helfer</summary>
@@ -93,6 +114,11 @@
           <option value="Dancing Script">Dancing Script (Schreibschrift)</option>
           <option value="Homemade Apple">Homemade Apple (Schreibschrift)</option>
         </select>
+
+        <label class="field profile-field" id="profileField" hidden>
+          <span>Welche Handschrift?</span>
+          <select id="profileSelect" aria-label="Handschrift auswählen"></select>
+        </label>
 
         <button type="button" id="openEditor" class="editor-btn">✍️ Eigene Handschrift zeichnen oder einlesen</button>
 
@@ -193,6 +219,15 @@
           <button type="button" id="shuffle" class="btn ghost" title="Neue zufällige Variante">🔀 <span>Neu mischen</span></button>
           <button type="button" id="print" class="btn ghost" title="Drucken">🖨️ <span>Drucken</span></button>
           <button type="button" id="png" class="btn ghost" title="Als Bild speichern">🖼️ <span>PNG</span></button>
+          <div class="menu-wrap">
+            <button type="button" id="transparentBtn" class="btn ghost" aria-haspopup="true" aria-expanded="false" title="Nur die Schrift, ohne Papier – zum Einfügen in Goodnotes">✂️ <span>Ohne Papier</span></button>
+            <div class="menu" id="transparentMenu" role="menu" hidden>
+              <p class="menu-title">Nur die Schrift, ohne Papier – zum Einfügen in Goodnotes</p>
+              <button type="button" role="menuitem" data-mode="copy">📋 Kopieren <small>dann in Goodnotes einsetzen</small></button>
+              <button type="button" role="menuitem" data-mode="whole">🖼️ Als Bild teilen / sichern <small>ganzer Text</small></button>
+              <button type="button" role="menuitem" data-mode="paragraphs">🧩 Absätze einzeln <small>jedes Bild frei verschiebbar</small></button>
+            </div>
+          </div>
           <button type="button" id="pdf" class="btn ghost" title="Als PDF speichern">📄 <span>PDF</span></button>
           <button type="button" id="share" class="btn primary" title="Teilen, z. B. an Goodnotes">📤 <span>Teilen<span class="long"> / Goodnotes</span></span></button>
         </div>
@@ -213,6 +248,8 @@
           <h3 class="card-title">Original</h3>
           <div class="tr-tools">
             <label class="btn ghost file-btn" id="trImageBtn">📷 <span>Bild / Foto</span><input type="file" id="trImage" accept="image/*,application/pdf,.pdf"></label>
+            <button type="button" id="trDictate" class="btn ghost" title="Diktieren">🎤 <span>Diktieren</span></button>
+            <select id="trDictLang" class="dict-lang" aria-label="Gesprochene Sprache"></select>
             <button type="button" id="trClear" class="btn ghost" title="Leeren">🗑️ <span>Leeren</span></button>
           </div>
         </div>
@@ -317,6 +354,14 @@
       <span id="hwProgress" class="hw-progress"></span>
       <button type="button" id="hwDone" class="primary">Fertig</button>
     </header>
+    <div class="hw-profiles">
+      <label class="hw-profile-pick">Handschrift
+        <select id="hwProfile" aria-label="Handschrift auswählen"></select>
+      </label>
+      <button type="button" id="hwProfileNew">＋ Neue</button>
+      <button type="button" id="hwProfileRename">✏️ Umbenennen</button>
+      <button type="button" id="hwProfileDelete" class="danger">🗑️ Löschen</button>
+    </div>
 
     <div class="hw-body">
       <section class="hw-draw">
@@ -410,13 +455,19 @@
 
   <script src="vendor/jspdf.umd.min.js" defer></script>
   <script src="vendor/anthropic/anthropic-sdk.min.js" defer></script>
-  <script src="handwriting.js?v=12" defer></script>
+  <script src="handwriting.js?v=15" defer></script>
   <script src="template.js?v=7" defer></script>
   <script src="ai.js?v=12" defer></script>
   <script src="scan.js?v=11" defer></script>
+  <script src="dictate.js?v=15" defer></script>
   <script src="synth.js?v=13" defer></script>
-  <script src="app.js?v=12" defer></script>
-  <script src="translate.js?v=11" defer></script>
-  <script src="router.js?v=11" defer></script>
+  <script src="app.js?v=15" defer></script>
+  <script src="translate.js?v=15" defer></script>
+  <script src="router.js?v=15" defer></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+    }
+  </script>
 </body>
 </html>

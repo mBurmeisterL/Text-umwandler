@@ -13,6 +13,13 @@ Die Startseite ist ein **Hauptmenü** mit zwei Bereichen (oben jederzeit über d
 
 Die **⚙️ KI-Einstellungen** (oben rechts) gelten für beide Bereiche.
 
+## Als App installieren
+
+Die Seite ist eine installierbare Web-App: In Safari auf **Teilen → „Zum Home-Bildschirm“** tippen.
+Sie startet dann ohne Browserleiste und funktioniert nach dem ersten Öffnen auch offline
+(außer den KI-Funktionen). Hinweis für iPad/iPhone: Die installierte App hat einen eigenen Speicher –
+eigene Handschrift über **Sichern/Laden** übertragen und die KI-Einstellungen dort neu eintragen.
+
 ## Funktionen
 
 - **Eigene Handschrift:** Buchstaben direkt auf der Seite mit Apple Pencil, Finger oder Maus
@@ -27,6 +34,11 @@ Die **⚙️ KI-Einstellungen** (oben rechts) gelten für beide Bereiche.
 - Automatischer Seitenumbruch (A4)
 - Export als PNG (pro Seite) oder PDF, oder direkt drucken
 - „Teilen“ öffnet auf iPad/iPhone das Teilen-Menü, z. B. um das PDF direkt in Goodnotes zu öffnen
+- **✂️ Ohne Papier:** nur die Schrift als transparentes Bild – kopieren und in Goodnotes einsetzen,
+  als Bild teilen/sichern oder jeden Absatz als eigenes Bild (in Goodnotes frei verschiebbar)
+- **Mehrere Handschriften** (z. B. eigene und „Mama“): im Handschrift-Fenster anlegen, umbenennen,
+  löschen; Schnellwahl unter „Schrift“
+- **🎤 Diktieren** im Textfeld und im Übersetzer (Sprache wählbar)
 - Text und Einstellungen werden im Browser gespeichert
 
 ## Eigene Handschrift
@@ -84,7 +96,8 @@ Als KI kann **Google Gemini** oder **Anthropic Claude** benutzt werden (Auswahl 
 - **Claude:** Schlüssel auf [console.anthropic.com](https://console.anthropic.com/settings/keys),
   Abrechnung pro Nutzung (meist wenige Cent pro Anfrage).
 
-- **Eigener Cloudflare Worker (ohne Schlüssel):** Workers AI im eigenen kostenlosen Cloudflare-Konto
+- **Eigener Cloudflare Worker (ohne Schlüssel)** – siehe auch [`cloudflare-worker/README.md`](cloudflare-worker/README.md)
+  für das automatische Aktualisieren über GitHub: Workers AI im eigenen kostenlosen Cloudflare-Konto
   (Tageskontingent). Kann alle KI-Funktionen; beim Lesen von Handschrift sind Gemini und Claude aber
   genauer. Für Bilder nutzt der Worker Mistral Small 3.1 bzw. Gemma 3 (Meta-Llama-Vision ist in der EU
   lizenzrechtlich ausgeschlossen). Einrichtung:

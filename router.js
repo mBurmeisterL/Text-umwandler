@@ -52,6 +52,16 @@
     if (e.key === "Escape" && !$("settingsDialog").hidden) closeSettings();
   });
 
+  // Hinweis zum Installieren nur im Browser zeigen (nicht in der installierten App) und bis zum Wegklicken
+  const standalone = window.navigator.standalone || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  let tipHidden = false;
+  try { tipHidden = localStorage.getItem("text-umwandler:installtip") === "aus"; } catch (_) { /* egal */ }
+  $("installTip").hidden = standalone || tipHidden;
+  $("installClose").addEventListener("click", () => {
+    $("installTip").hidden = true;
+    try { localStorage.setItem("text-umwandler:installtip", "aus"); } catch (_) { /* egal */ }
+  });
+
   window.addEventListener("hashchange", show);
   show();
 })();

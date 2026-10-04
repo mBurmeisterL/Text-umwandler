@@ -178,6 +178,10 @@
     $("penOut").textContent = els.pen.value;
     $("penField").hidden = els.font.value !== CUSTOM;
     $("synthField").hidden = els.font.value !== CUSTOM;
+    const H = window.Handschrift;
+    $("profileField").hidden = els.font.value !== CUSTOM || !H || H.profiles().length < 2;
+    const tileName = document.querySelector('#fontGrid .tile.custom .tile-name');
+    if (tileName && H) tileName.textContent = H.activeProfile().name;
     els.synthBase.disabled = !els.synth.checked;
     for (const b of els.swatches.querySelectorAll("button")) {
       b.classList.toggle("active", b.dataset.color.toLowerCase() === state.ink.toLowerCase());
@@ -261,9 +265,10 @@
     const lines = [];
     const paragraphs = s.text.replace(/\r/g, "").replace(/\t/g, "    ").split("\n");
 
-    for (const para of paragraphs) {
+    paragraphs.forEach((para, pi) => {
+      const start = lines.length;
       const words = para.split(/ +/).filter(Boolean);
-      if (!words.length) { lines.push([]); continue; }
+      if (!words.length) { lines.push([]); lines[start].para = pi; return; }
 
       let cur = [];
       let curW = 0;
@@ -288,7 +293,9 @@
         }
       }
       if (cur.length) lines.push(cur);
-    }
+      // Absatznummer merken (für den Export einzelner Absätze)
+      for (let k = start; k < lines.length; k++) lines[k].para = pi;
+    });
     return lines;
   }
 
@@ -417,6 +424,7 @@
   // ---------- Rendern ----------
 
   let renderToken = 0;
+  let lastRender = null;
 
   async function render() {
     const token = ++renderToken;
@@ -462,6 +470,8 @@
       });
     }
 
+    lastRender = { s, pv, lines, linesPerPage, font: measure.font };
+
     let msg = pageCount === 1 ? "1 Seite" : `${pageCount} Seiten`;
     if (s.font === CUSTOM && !(window.Handschrift && window.Handschrift.count())) {
       msg = "Noch keine eigenen Buchstaben – klicke auf „Eigene Handschrift zeichnen“.";
@@ -496,6 +506,113 @@
     document.body.appendChild(a);
     a.click();
     a.remove();
+  }
+
+  // ---------- Transparenter Export (nur Schrift, ohne Papier) ----------
+
+  // Zeichnet die angegebenen Zeilen ohne Papier, mit derselben Zufallsvariation wie die Vorschau,
+  // und schneidet das Bild auf die Schrift zu
+  function transparentCanvas(indices) {
+    const { s, pv, linesPerPage, lines, font } = lastRender;
+    const scale = 2;
+    const c = document.createElement("canvas");
+    c.width = PAGE_W * scale;
+    c.height = Math.ceil((indices.length + 1.5) * s.line * scale);
+    const ctx = c.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.font = font;
+    ctx.fillStyle = s.ink;
+    ctx.textBaseline = "alphabetic";
+    indices.forEach((li, k) => {
+      const baseY = s.line * (k + 1) - Math.max(2, s.size * 0.06);
+      drawLine(ctx, pv, lines[li], baseY, s, rngFor(state.seed, Math.floor(li / linesPerPage), li % linesPerPage));
+    });
+    return cropToInk(c);
+  }
+
+  function cropToInk(c) {
+    const ctx = c.getContext("2d");
+    const { width: w, height: h } = c;
+    const d = ctx.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (d[(y * w + x) * 4 + 3] > 8) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return null;
+    const pad = 16;
+    const x0 = Math.max(0, minX - pad), y0 = Math.max(0, minY - pad);
+    const out = document.createElement("canvas");
+    out.width = Math.min(w, maxX + pad) - x0;
+    out.height = Math.min(h, maxY + pad) - y0;
+    out.getContext("2d").drawImage(c, -x0, -y0);
+    return out;
+  }
+
+  // Alle Zeilen mit Inhalt, wahlweise nach Absätzen gruppiert
+  function transparentParts(perParagraph) {
+    if (!lastRender) return [];
+    const groups = new Map();
+    lastRender.lines.forEach((ln, i) => {
+      if (!ln.length && !perParagraph) { groups.set("all", (groups.get("all") || []).concat(i)); return; }
+      if (!ln.length) return;
+      const key = perParagraph ? ln.para : "all";
+      groups.set(key, (groups.get(key) || []).concat(i));
+    });
+    return [...groups.values()].map(transparentCanvas).filter(Boolean);
+  }
+
+  const toBlob = (c) => new Promise((res) => c.toBlob(res, "image/png"));
+
+  async function shareOrDownload(files) {
+    if (navigator.canShare && navigator.canShare({ files })) {
+      try {
+        await navigator.share({ files, title: "Handschrift" });
+        return true;
+      } catch (e) {
+        if (e.name === "AbortError") return true;
+      }
+    }
+    for (const f of files) {
+      const url = URL.createObjectURL(f);
+      download(url, f.name);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return false;
+  }
+
+  async function exportTransparent(mode) {
+    closeTransparentMenu();
+    if (!lastRender || !els.text.value.trim()) { els.status.textContent = "Es gibt noch keinen Text."; return; }
+    if (mode === "copy") {
+      const parts = transparentParts(false);
+      if (!parts.length) return;
+      // Safari braucht das Versprechen direkt im Klick, deshalb ClipboardItem mit Promise
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": toBlob(parts[0]) })]);
+        els.status.textContent = "📋 Schrift als Bild kopiert – in Goodnotes lange auf die Seite tippen und „Einsetzen“ wählen.";
+      } catch (_) {
+        els.status.textContent = "Kopieren ging nicht – nutze „Als Bild teilen/sichern“.";
+      }
+      return;
+    }
+    const parts = transparentParts(mode === "paragraphs");
+    const files = await Promise.all(parts.map(async (c, i) =>
+      new File([await toBlob(c)], parts.length > 1 ? `handschrift-absatz-${i + 1}.png` : "handschrift-transparent.png", { type: "image/png" })));
+    const shared = await shareOrDownload(files);
+    els.status.textContent = shared
+      ? "Tipp: „Bild sichern“ wählen und in Goodnotes über das Bild-Werkzeug einfügen."
+      : `${files.length} Bild${files.length > 1 ? "er" : ""} heruntergeladen – in Goodnotes über das Bild-Werkzeug einfügen.`;
+  }
+
+  function closeTransparentMenu() {
+    $("transparentMenu").hidden = true;
+    $("transparentBtn").setAttribute("aria-expanded", "false");
   }
 
   async function exportPng() {
@@ -787,9 +904,29 @@
       if (window.HandschriftSynth) window.HandschriftSynth.invalidate();
       scheduleRender();
     });
+    // Schnellwechsel der Handschrift im Hauptbereich
+    const profileSelect = $("profileSelect");
+    const refreshProfiles = () => {
+      window.Handschrift.fillProfileSelect(profileSelect);
+      updateOutputs();
+    };
+    window.Handschrift.onProfiles(refreshProfiles);
+    refreshProfiles();
+    profileSelect.addEventListener("change", () => window.Handschrift.switchProfile(profileSelect.value));
+
     window.HandschriftVorlage.init();
     window.HandschriftScan.init();
     initAi();
+    window.Diktat.attach({
+      button: $("textDictate"),
+      textarea: els.text,
+      select: $("textDictLang"),
+      say: (msg, kind) => {
+        const h = $("textHint");
+        h.textContent = msg || "";
+        h.classList.toggle("error", kind === "error");
+      },
+    });
 
     for (const el of [els.text, els.font, els.paper, els.size, els.line, els.mess, els.spacing, els.word, els.pen, els.margin, els.synth, els.synthBase]) {
       el.addEventListener("input", () => { updateOutputs(); scheduleRender(); });
@@ -814,6 +951,18 @@
       render();
     });
     $("png").addEventListener("click", exportPng);
+    $("transparentBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const menu = $("transparentMenu");
+      menu.hidden = !menu.hidden;
+      $("transparentBtn").setAttribute("aria-expanded", String(!menu.hidden));
+    });
+    document.addEventListener("click", (e) => {
+      if (!$("transparentMenu").hidden && !e.target.closest(".menu-wrap")) closeTransparentMenu();
+    });
+    for (const b of document.querySelectorAll("#transparentMenu [data-mode]")) {
+      b.addEventListener("click", () => exportTransparent(b.dataset.mode));
+    }
     $("pdf").addEventListener("click", exportPdf);
     $("print").addEventListener("click", () => window.print());
     $("share").addEventListener("click", sharePdf);
