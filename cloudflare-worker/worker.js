@@ -5,6 +5,8 @@
 //   2. Unter „Edit code“ den kompletten Inhalt dieser Datei einfügen und „Deploy“ tippen
 //   3. Die Worker-Adresse (…workers.dev) auf der Webseite unter KI-Einstellungen eintragen
 //
+// Funktionen: Texte schreiben/überarbeiten, Rechtschreibung, Handschrift abtippen (/ocr),
+// Buchstaben einer Handschrift-Seite erkennen (/label).
 // Es wird kein API-Schlüssel gebraucht. Nur die eigene GitHub-Pages-Seite darf den Worker benutzen.
 
 const ALLOWED_ORIGINS = ["https://mburmeisterl.github.io"];
@@ -17,7 +19,20 @@ const TEXT_MODELS = [
   "@cf/meta/llama-3.1-8b-instruct",
 ];
 
+// Modelle, die Bilder lesen können (Meta-Llama-Vision ist in der EU lizenzrechtlich ausgeschlossen)
+const VISION_MODELS = [
+  "@cf/mistralai/mistral-small-3.1-24b-instruct",
+  "@cf/google/gemma-3-12b-it",
+  "@cf/llava-hf/llava-1.5-7b-hf",
+];
+
 const MAX_INPUT = 8000; // Zeichen
+const MAX_IMAGE = 4_000_000; // Zeichen Base64 (ca. 3 MB)
+
+const OCR_PROMPT =
+  "Schreibe den handgeschriebenen Text auf diesem Bild exakt ab. Behalte Zeilenumbrüche und Absätze bei. " +
+  "Gib nur den abgeschriebenen Text aus – keine Einleitung, keine Erklärungen, kein Markdown. " +
+  "Ein Wort, das du nicht lesen kannst, schreibst du als [?].";
 
 const WRITE_SYSTEM =
   "Du schreibst Texte, die anschließend in Handschrift umgewandelt werden – zum Beispiel Briefe, " +
@@ -35,6 +50,7 @@ const CORRECT_SYSTEM =
   'unverändert zurück und setze "changes" auf eine leere Liste.';
 
 let workingModel = null;
+let workingVisionModel = null;
 
 function corsHeaders(origin) {
   return {
@@ -59,6 +75,45 @@ async function runText(env, messages, maxTokens) {
     } catch (e) {
       lastError = e;
       // Tageslimit gilt für alle Modelle – dann nicht weiter probieren
+      if (/allocation|limit|quota|4006/i.test(String(e && e.message))) break;
+    }
+  }
+  throw lastError;
+}
+
+function dataUrlToBytes(dataUrl) {
+  const bin = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+  const bytes = new Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function runVision(env, prompt, dataUrl, maxTokens) {
+  const models = workingVisionModel
+    ? [workingVisionModel, ...VISION_MODELS.filter((m) => m !== workingVisionModel)]
+    : VISION_MODELS;
+  let lastError;
+  for (const model of models) {
+    try {
+      const out = model.includes("llava")
+        ? await env.AI.run(model, { image: dataUrlToBytes(dataUrl), prompt, max_tokens: maxTokens })
+        : await env.AI.run(model, {
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: prompt },
+                { type: "image_url", image_url: { url: dataUrl } },
+              ],
+            }],
+            max_tokens: maxTokens,
+          });
+      const r = out && (out.response != null ? out.response : out.description);
+      const text = typeof r === "string" ? r : r == null ? "" : JSON.stringify(r);
+      if (!text.trim()) throw new Error(`${model} lieferte keine Antwort`);
+      workingVisionModel = model;
+      return { model, text };
+    } catch (e) {
+      lastError = e;
       if (/allocation|limit|quota|4006/i.test(String(e && e.message))) break;
     }
   }
@@ -131,6 +186,41 @@ export default {
           ? data.changes.filter((c) => c && typeof c.original === "string" && typeof c.korrektur === "string")
           : [];
         return json({ model: r.model, corrected: typeof data.corrected === "string" ? data.corrected : text, changes });
+      }
+
+      if (path === "/ocr" || path === "/label") {
+        const image = typeof body.image === "string" ? body.image : "";
+        if (!/^data:image\/(jpeg|png|webp);base64,/.test(image)) return json({ error: "Es fehlt ein Bild." }, 400);
+        if (image.length > MAX_IMAGE) return json({ error: "Das Bild ist zu groß." }, 413);
+
+        if (path === "/ocr") {
+          const r = await runVision(env, OCR_PROMPT, image, 2000);
+          return json({ model: r.model, text: r.text.trim() });
+        }
+
+        // /label: nummerierte Ausschnitte einzelnen Zeichen zuordnen
+        const from = Math.max(1, Number(body.from) | 0);
+        const to = Math.max(from, Number(body.to) | 0);
+        const context = str(body.context).slice(0, 1500);
+        const prompt =
+          `Das Bild zeigt nummerierte Ausschnitte (rote Zahl oben links in jedem Kästchen) aus einer handgeschriebenen Seite, ` +
+          `Nummer ${from} bis ${to}. Jeder Ausschnitt sollte ein einzelnes Zeichen zeigen: Buchstabe, Ziffer oder Satzzeichen, ` +
+          `auch ä ö ü ß. Achte auf Groß- und Kleinschreibung. ` +
+          (context ? `Zur Orientierung, so ist die Seite aufgebaut: ${context} ` : "") +
+          `Antworte ausschließlich mit JSON in dieser Form: {"items": [{"id": ${from}, "char": "a"}]}. ` +
+          `Gib für jede Nummer genau ein Zeichen an, oder einen leeren String, wenn es kein einzelnes Zeichen ist oder du unsicher bist.`;
+        const r = await runVision(env, prompt, image, 4000);
+        let data;
+        try {
+          data = extractJson(r.text);
+        } catch (_) {
+          return json({ error: "Die Antwort der KI konnte nicht gelesen werden – bitte nochmal versuchen." }, 502);
+        }
+        const items = (Array.isArray(data.items) ? data.items : [])
+          .map((it) => ({ id: Number(it && it.id), char: it && typeof it.char === "string" ? it.char.trim() : "" }))
+          .filter((it) => Number.isInteger(it.id) && it.id >= from && it.id <= to)
+          .map((it) => ({ id: it.id, char: [...it.char].length === 1 ? it.char : "" }));
+        return json({ model: r.model, items });
       }
 
       return json({ error: "Unbekannte Funktion." }, 404);

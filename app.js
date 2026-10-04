@@ -536,6 +536,48 @@
       });
     });
 
+    // Handschrift abtippen: Foto/PDF einer handgeschriebenen Seite → getippter Text
+    const ocrInput = $("aiOcr");
+    ocrInput.addEventListener("click", (e) => {
+      if (!KI.hasKey()) {
+        e.preventDefault();
+        status.textContent = "Bitte zuerst unter „KI-Einstellungen“ einen Schlüssel bzw. die Worker-Adresse eintragen.";
+        $("aiSettings").open = true;
+      }
+    });
+    ocrInput.addEventListener("change", async () => {
+      const file = ocrInput.files[0];
+      ocrInput.value = "";
+      if (!file) return;
+      busy(true);
+      $("aiOcrBtn").classList.add("disabled");
+      status.textContent = "Die KI liest die Handschrift … das kann bis zu einer Minute dauern.";
+      try {
+        const pages = await window.HandschriftVorlage.fileToCanvases(file);
+        const src = pages[0].canvas;
+        const s = Math.min(1, 1600 / Math.max(src.width, src.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(src.width * s);
+        c.height = Math.round(src.height * s);
+        const cx = c.getContext("2d");
+        cx.fillStyle = "#fff";
+        cx.fillRect(0, 0, c.width, c.height);
+        cx.drawImage(src, 0, 0, c.width, c.height);
+        const text = await KI.readText(c.toDataURL("image/jpeg", 0.85).split(",")[1]);
+        if (!text) throw new Error("Auf dem Bild wurde kein Text erkannt.");
+        remember();
+        const current = els.text.value.trim();
+        setText(current ? current + "\n\n" + text : text);
+        status.textContent = (current ? "Abgetippter Text wurde unten angehängt." : "Text abgetippt.") +
+          " Bitte kurz prüfen – [?] markiert unleserliche Wörter." + (pages.length > 1 ? " Bei PDFs wird nur die erste Seite gelesen." : "");
+      } catch (e) {
+        status.textContent = KI.friendlyError(e);
+      } finally {
+        busy(false);
+        $("aiOcrBtn").classList.remove("disabled");
+      }
+    });
+
     $("aiUndo").addEventListener("click", () => {
       if (undoText === null) return;
       setText(undoText);
@@ -558,8 +600,8 @@
       cloudflare:
         "Trage die Adresse deines Cloudflare Workers ein (z. B. https://umwandeln.dein-name.workers.dev). " +
         "Der Worker braucht das Binding „AI“ (Workers AI) und den Code aus cloudflare-worker/worker.js im Repository. " +
-        "Kostenlos im Tageskontingent von Cloudflare. Texte schreiben und Rechtschreibung gehen damit, " +
-        "Handschrift-Seiten lesen nicht.",
+        "Kostenlos im Tageskontingent von Cloudflare. Alle Funktionen gehen damit; beim Lesen von " +
+        "Handschrift sind Gemini und Claude aber genauer.",
     };
     const COMMON_KEY = "Der Schlüssel wird nur in diesem Browser gespeichert und direkt an den Anbieter geschickt – benutze die KI-Funktionen nur auf deinen eigenen Geräten.";
 

@@ -68,6 +68,11 @@
     );
   }
 
+  const OCR_PROMPT =
+    "Schreibe den handgeschriebenen Text auf diesem Bild exakt ab. Behalte Zeilenumbrüche und Absätze bei. " +
+    "Gib nur den abgeschriebenen Text aus – keine Einleitung, keine Erklärungen, kein Markdown. " +
+    "Ein Wort, das du nicht lesen kannst, schreibst du als [?].";
+
   const PAGE_INTRO = "Bild 1 – die ganze handgeschriebene Seite:";
   const SHEETS_INTRO = "Die folgenden Bilder zeigen ausgeschnittene Tintenstücke dieser Seite, jedes mit einer roten Nummer:";
 
@@ -152,6 +157,23 @@
         ...CLAUDE_FALLBACK,
       });
       return claudeJson(message);
+    },
+
+    async readText(image) {
+      const message = await claudeClient().beta.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 8000,
+        output_config: { effort: "low" },
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
+            { type: "text", text: OCR_PROMPT },
+          ],
+        }],
+        ...CLAUDE_FALLBACK,
+      });
+      return claudeText(message).trim();
     },
 
     async labelGlyphs(page, sheets, lines, count) {
@@ -440,6 +462,14 @@
       return parseJsonText(out, truncated);
     },
 
+    async readText(image) {
+      const { text } = await geminiGenerate({
+        contents: [{ role: "user", parts: [{ inline_data: { mime_type: "image/jpeg", data: image } }, { text: OCR_PROMPT }] }],
+        generationConfig: { maxOutputTokens: 16384 },
+      });
+      return text.trim();
+    },
+
     async labelGlyphs(page, sheets, lines, count) {
       const image = (data) => ({ inline_data: { mime_type: "image/jpeg", data } });
       const { text, truncated } = await geminiGenerate({
@@ -494,8 +524,22 @@
       const data = await workerCall("/correct", { text });
       return { corrected: data.corrected, changes: data.changes || [] };
     },
-    async labelGlyphs() {
-      throw new AiError("Handschrift-Seiten lesen geht mit dem Cloudflare Worker nicht. Bitte die Vorlage benutzen oder in den KI-Einstellungen Gemini bzw. Claude wählen.");
+    async readText(image) {
+      const data = await workerCall("/ocr", { image: "data:image/jpeg;base64," + image });
+      return (data.text || "").trim();
+    },
+
+    // Jedes Ausschnitt-Bild einzeln, damit die kleineren Modelle nicht überfordert werden
+    async labelGlyphs(page, sheets, lines, count) {
+      const per = window.HandschriftScan.SHEET_MAX;
+      const items = [];
+      for (let i = 0; i < sheets.length; i++) {
+        const from = i * per + 1;
+        const to = Math.min(count, (i + 1) * per);
+        const data = await workerCall("/label", { image: "data:image/jpeg;base64," + sheets[i], from, to, context: lines });
+        items.push(...(data.items || []));
+      }
+      return items;
     },
     async test() {
       const data = await workerCall("/test", {});
@@ -525,7 +569,7 @@
     getKey,
     setKey,
     hasKey: () => !!getKey(),
-    canReadPages: () => getProvider() !== "cloudflare",
+
     getGeminiModel: () => read(STORE.geminiModel),
     setGeminiModel: (m) => { write(STORE.geminiModel, m); workingModel = null; },
     getWorkingGeminiModel: () => workingModel,
@@ -534,6 +578,7 @@
     writeText: (...a) => impl().writeText(...a),
     correctText: (...a) => impl().correctText(...a),
     labelGlyphs: (...a) => impl().labelGlyphs(...a),
+    readText: (...a) => impl().readText(...a),
     test: () => impl().test(),
     friendlyError,
   };

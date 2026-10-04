@@ -6,7 +6,7 @@
   <title>Text-Umwandler – Text in Handschrift</title>
   <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=9">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -36,6 +36,7 @@
             <button type="button" id="aiWrite" class="primary">✨ Text schreiben</button>
             <button type="button" id="aiRewrite">✏️ Text überarbeiten</button>
             <button type="button" id="aiCorrect">✔️ Rechtschreibung prüfen</button>
+            <label class="file-btn" id="aiOcrBtn">📷 Handschrift abtippen<input type="file" id="aiOcr" accept="image/*,application/pdf,.pdf"></label>
             <button type="button" id="aiUndo" hidden>↶ Rückgängig</button>
           </div>
           <p class="hint" id="aiStatus" role="status"></p>
@@ -265,8 +266,8 @@
   <script src="vendor/anthropic/anthropic-sdk.min.js" defer></script>
   <script src="handwriting.js?v=5" defer></script>
   <script src="template.js?v=7" defer></script>
-  <script src="ai.js?v=8" defer></script>
-  <script src="scan.js?v=8" defer></script>
-  <script src="app.js?v=8" defer></script>
+  <script src="ai.js?v=9" defer></script>
+  <script src="scan.js?v=9" defer></script>
+  <script src="app.js?v=9" defer></script>
 </body>
 </html>
