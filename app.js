@@ -488,7 +488,7 @@
     $("print").addEventListener("click", () => window.print());
     $("share").addEventListener("click", sharePdf);
     $("openEditor").addEventListener("click", () => window.Handschrift.open());
-    $("hwDialog").addEventListener("close", () => {
+    window.Handschrift.onClose(() => {
       if (window.Handschrift.count() && els.font.value !== CUSTOM) {
         els.font.value = CUSTOM;
         updateOutputs();
