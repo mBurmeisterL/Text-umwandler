@@ -6,7 +6,14 @@
   <title>Text-Umwandler – Text in Handschrift</title>
   <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
+  <script>
+    // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
+    window.addEventListener("error", function (e) {
+      var s = document.getElementById("status");
+      if (s) s.textContent = "Fehler: " + e.message;
+    });
+  </script>
 </head>
 <body>
   <header class="topbar">
@@ -115,7 +122,8 @@
     </section>
   </main>
 
-  <dialog id="hwDialog" class="hw" aria-labelledby="hwTitle">
+  <div id="hwDialog" class="hw-overlay" hidden>
+  <div class="hw" role="dialog" aria-modal="true" aria-labelledby="hwTitle">
     <header class="hw-head">
       <h2 id="hwTitle">Meine Handschrift</h2>
       <span id="hwProgress" class="hw-progress"></span>
@@ -159,10 +167,11 @@
       <label class="file-btn">📂 Laden<input type="file" id="hwImport" accept="application/json,.json"></label>
       <button type="button" id="hwReset" class="danger">Alles löschen</button>
     </footer>
-  </dialog>
+  </div>
+  </div>
 
   <script src="vendor/jspdf.umd.min.js" defer></script>
-  <script src="handwriting.js" defer></script>
-  <script src="app.js" defer></script>
+  <script src="handwriting.js?v=3" defer></script>
+  <script src="app.js?v=3" defer></script>
 </body>
 </html>

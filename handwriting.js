@@ -134,7 +134,8 @@
   // ---------- Editor ----------
 
   const $ = (id) => document.getElementById(id);
-  let dialog, pad, padCtx;
+  let overlay, pad, padCtx;
+  const closeListeners = [];
   let current = ALL_CHARS[0];
   let drafts = [];
   let activeStroke = null;
@@ -252,7 +253,7 @@
     drafts = [];
     $("hwChar").textContent = ch;
     for (const [c, t] of Object.entries(tiles)) t.classList.toggle("current", c === ch);
-    tiles[ch]?.scrollIntoView({ block: "nearest" });
+    if (tiles[ch]) tiles[ch].scrollIntoView({ block: "nearest" });
     renderVariants();
     redrawPad();
     setStatus("");
@@ -298,8 +299,7 @@
     if (!t) return;
     const vs = glyphs[ch];
     t.classList.toggle("done", !!vs);
-    t.querySelector("canvas")?.remove();
-    t.querySelector(".badge")?.remove();
+    t.querySelectorAll("canvas, .badge").forEach((el) => el.remove());
     if (vs) {
       const c = document.createElement("canvas");
       c.width = 80; c.height = 64;
@@ -373,15 +373,30 @@
     }
   }
 
+  // Eigenes Overlay statt <dialog>, damit es auch in älteren Safari-Versionen funktioniert
+  function isOpen() {
+    return !overlay.hidden;
+  }
+
   function open() {
-    dialog.showModal();
+    overlay.hidden = false;
+    document.body.classList.add("modal-open");
     resizePad();
     select(current);
   }
 
+  function close() {
+    if (!isOpen()) return;
+    commitDraft();
+    activeStroke = null;
+    overlay.hidden = true;
+    document.body.classList.remove("modal-open");
+    closeListeners.forEach((fn) => fn());
+  }
+
   function init() {
     load();
-    dialog = $("hwDialog");
+    overlay = $("hwDialog");
     pad = $("hwPad");
     padCtx = pad.getContext("2d");
 
@@ -390,7 +405,7 @@
     pad.addEventListener("pointerup", onPointerUp);
     pad.addEventListener("pointercancel", onPointerUp);
     pad.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
-    window.addEventListener("resize", () => { if (dialog.open) resizePad(); });
+    window.addEventListener("resize", () => { if (isOpen()) resizePad(); });
 
     $("hwUndo").addEventListener("click", () => { drafts.pop(); redrawPad(); });
     $("hwClear").addEventListener("click", () => { drafts = []; redrawPad(); });
@@ -418,13 +433,11 @@
       select(ALL_CHARS[0]);
       updateProgress();
     });
-    $("hwDone").addEventListener("click", () => dialog.close());
-    dialog.addEventListener("close", () => {
-      commitDraft();
-      activeStroke = null;
-    });
-    dialog.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); drafts.pop(); redrawPad(); }
+    $("hwDone").addEventListener("click", close);
+    document.addEventListener("keydown", (e) => {
+      if (!isOpen()) return;
+      if (e.key === "Escape") { e.preventDefault(); close(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); drafts.pop(); redrawPad(); }
       else if (e.key === "Enter" && e.target.tagName !== "BUTTON") { e.preventDefault(); step(1); }
     });
 
@@ -436,6 +449,7 @@
     GAP,
     init,
     open,
+    onClose: (fn) => closeListeners.push(fn),
     has: (ch) => !!glyphs[ch],
     variants: (ch) => glyphs[ch] || [],
     avgWidth,
