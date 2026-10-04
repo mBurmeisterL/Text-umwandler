@@ -7,6 +7,7 @@
     provider: "text-umwandler:aiprovider",
     claude: "text-umwandler:apikey",
     gemini: "text-umwandler:apikey:gemini",
+    cloudflare: "text-umwandler:workerurl",
     geminiModel: "text-umwandler:geminimodel",
   };
 
@@ -25,7 +26,7 @@
 
   function getProvider() {
     const p = read(STORE.provider);
-    if (p === "claude" || p === "gemini") return p;
+    if (p === "claude" || p === "gemini" || p === "cloudflare") return p;
     return read(STORE.claude) && !read(STORE.gemini) ? "claude" : "gemini";
   }
 
@@ -457,6 +458,52 @@
   };
 
   // =====================================================================
+  // Eigener Cloudflare Worker mit Workers AI (kein Schlüssel im Browser)
+  // =====================================================================
+
+  async function workerCall(path, body) {
+    const base = getKey("cloudflare").replace(/\/+$/, "");
+    if (!base) throw new AiError("Bitte zuerst unter „KI-Einstellungen“ die Adresse deines Cloudflare Workers eintragen.");
+    let res;
+    try {
+      res = await fetch(base + path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (_) {
+      throw new AiError("Der Worker ist nicht erreichbar. Stimmt die Adresse (…workers.dev) und ist der Worker deployt?");
+    }
+    let data = null;
+    try { data = await res.json(); } catch (_) { /* keine JSON-Antwort */ }
+    if (!res.ok || !data || data.error) {
+      throw new AiError((data && data.error) || `Der Worker hat mit Fehler ${res.status} geantwortet. Ist der Worker-Code eingefügt und deployt?`);
+    }
+    return data;
+  }
+
+  const cloudflare = {
+    async writeText(instruction, currentText, onText) {
+      const data = await workerCall("/write", { instruction, currentText });
+      const text = (data.text || "").trim();
+      if (!text) throw new AiError("Die KI hat keinen Text geliefert – bitte nochmal versuchen.");
+      onText(text);
+      return text;
+    },
+    async correctText(text) {
+      const data = await workerCall("/correct", { text });
+      return { corrected: data.corrected, changes: data.changes || [] };
+    },
+    async labelGlyphs() {
+      throw new AiError("Handschrift-Seiten lesen geht mit dem Cloudflare Worker nicht. Bitte die Vorlage benutzen oder in den KI-Einstellungen Gemini bzw. Claude wählen.");
+    },
+    async test() {
+      const data = await workerCall("/test", {});
+      return { model: data.model, reply: data.reply || "" };
+    },
+  };
+
+  // =====================================================================
 
   function friendlyError(e) {
     const A = window.Anthropic;
@@ -470,7 +517,7 @@
     return e.message || String(e);
   }
 
-  const impl = () => (getProvider() === "claude" ? claude : gemini);
+  const impl = () => ({ claude, gemini, cloudflare })[getProvider()];
 
   window.HandschriftKI = {
     getProvider,
@@ -478,6 +525,7 @@
     getKey,
     setKey,
     hasKey: () => !!getKey(),
+    canReadPages: () => getProvider() !== "cloudflare",
     getGeminiModel: () => read(STORE.geminiModel),
     setGeminiModel: (m) => { write(STORE.geminiModel, m); workingModel = null; },
     getWorkingGeminiModel: () => workingModel,

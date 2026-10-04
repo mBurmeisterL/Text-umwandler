@@ -555,8 +555,13 @@
       claude:
         'Einen Schlüssel bekommst du auf <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. ' +
         "Die Nutzung wird pro Anfrage abgerechnet (meist ein paar Cent). ",
+      cloudflare:
+        "Trage die Adresse deines Cloudflare Workers ein (z. B. https://umwandeln.dein-name.workers.dev). " +
+        "Der Worker braucht das Binding „AI“ (Workers AI) und den Code aus cloudflare-worker/worker.js im Repository. " +
+        "Kostenlos im Tageskontingent von Cloudflare. Texte schreiben und Rechtschreibung gehen damit, " +
+        "Handschrift-Seiten lesen nicht.",
     };
-    const COMMON = "Der Schlüssel wird nur in diesem Browser gespeichert und direkt an den Anbieter geschickt – benutze die KI-Funktionen nur auf deinen eigenen Geräten.";
+    const COMMON_KEY = "Der Schlüssel wird nur in diesem Browser gespeichert und direkt an den Anbieter geschickt – benutze die KI-Funktionen nur auf deinen eigenen Geräten.";
 
     async function loadModels() {
       if (KI.getProvider() !== "gemini" || !KI.getKey("gemini")) return;
@@ -576,11 +581,14 @@
     function showProvider() {
       const p = KI.getProvider();
       providerSel.value = p;
-      $("aiKeyLabel").textContent = p === "gemini" ? "Gemini-API-Schlüssel" : "Claude-API-Schlüssel (Anthropic)";
-      keyInput.placeholder = p === "gemini" ? "AIza…" : "sk-ant-…";
-      keyInput.value = KI.getKey(p) ? MASK : "";
+      const isWorker = p === "cloudflare";
+      $("aiKeyLabel").textContent = { gemini: "Gemini-API-Schlüssel", claude: "Claude-API-Schlüssel (Anthropic)", cloudflare: "Adresse deines Workers" }[p];
+      keyInput.placeholder = { gemini: "AIza…", claude: "sk-ant-…", cloudflare: "https://umwandeln.….workers.dev" }[p];
+      // Die Worker-Adresse ist kein Geheimnis und wird lesbar angezeigt
+      keyInput.type = isWorker ? "url" : "password";
+      keyInput.value = isWorker ? KI.getKey(p) : (KI.getKey(p) ? MASK : "");
       $("aiModelField").hidden = p !== "gemini";
-      $("aiKeyHint").innerHTML = HINTS[p] + COMMON;
+      $("aiKeyHint").innerHTML = HINTS[p] + (isWorker ? "" : COMMON_KEY);
       loadModels();
     }
 
@@ -591,10 +599,17 @@
     });
     modelSel.addEventListener("change", () => KI.setGeminiModel(modelSel.value));
     function saveKey(quiet) {
-      const key = keyInput.value.trim().replace(/\s+/g, "");
+      let key = keyInput.value.trim().replace(/\s+/g, "");
       if (!key || key === MASK) {
         if (!quiet) status.textContent = "Bitte einen Schlüssel einfügen.";
         return false;
+      }
+      if (KI.getProvider() === "cloudflare") {
+        if (!/^https?:\/\//i.test(key)) key = "https://" + key;
+        KI.setKey("cloudflare", key);
+        keyInput.value = key;
+        status.textContent = "Adresse gespeichert. Tippe auf „Verbindung testen“, um den Worker zu prüfen.";
+        return true;
       }
       KI.setKey(KI.getProvider(), key);
       keyInput.value = MASK;
@@ -607,7 +622,7 @@
     keyInput.addEventListener("change", () => saveKey(true));
 
     $("aiTest").addEventListener("click", async () => {
-      if (keyInput.value.trim() && keyInput.value !== MASK) saveKey(true);
+      if (keyInput.value.trim() && keyInput.value !== MASK && keyInput.value.trim() !== KI.getKey()) saveKey(true);
       if (!KI.hasKey()) { status.textContent = "Bitte zuerst einen Schlüssel einfügen."; return; }
       const btn = $("aiTest");
       btn.disabled = true;
