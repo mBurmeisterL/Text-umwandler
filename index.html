@@ -25,7 +25,8 @@
         <label class="field">
           <span>Schriftart</span>
           <select id="font">
-            <option value="Caveat">Caveat (locker)</option>
+            <option value="__custom__">✍️ Meine Handschrift</option>
+            <option value="Caveat" selected>Caveat (locker)</option>
             <option value="Kalam">Kalam (ordentlich)</option>
             <option value="Indie Flower">Indie Flower (rund)</option>
             <option value="Shadows Into Light">Shadows Into Light (schmal)</option>
@@ -48,6 +49,8 @@
         </label>
       </div>
 
+      <button type="button" id="openEditor" class="editor-btn">✍️ Eigene Handschrift zeichnen</button>
+
       <div class="field">
         <span>Tintenfarbe</span>
         <div class="swatches" id="swatches">
@@ -65,6 +68,11 @@
       <label class="field range">
         <span>Schriftgröße <output id="sizeOut"></output></span>
         <input type="range" id="size" min="24" max="80" step="1" value="46">
+      </label>
+
+      <label class="field range" id="penField">
+        <span>Stiftstärke <output id="penOut"></output></span>
+        <input type="range" id="pen" min="2" max="10" step="0.5" value="5">
       </label>
 
       <label class="field range">
@@ -97,6 +105,7 @@
         <button type="button" id="png">🖼️ PNG</button>
         <button type="button" id="pdf">📄 PDF</button>
         <button type="button" id="print" class="secondary">🖨️ Drucken</button>
+        <button type="button" id="share" class="wide">📤 Teilen / an Goodnotes senden</button>
       </div>
       <p class="hint" id="status" role="status"></p>
     </section>
@@ -106,7 +115,54 @@
     </section>
   </main>
 
+  <dialog id="hwDialog" class="hw" aria-labelledby="hwTitle">
+    <header class="hw-head">
+      <h2 id="hwTitle">Meine Handschrift</h2>
+      <span id="hwProgress" class="hw-progress"></span>
+      <button type="button" id="hwDone" class="primary">Fertig</button>
+    </header>
+
+    <div class="hw-body">
+      <section class="hw-draw">
+        <div class="hw-current">
+          <span>Schreibe: <strong id="hwChar">a</strong></span>
+          <span id="hwVarCount" class="muted"></span>
+        </div>
+        <canvas id="hwPad" aria-label="Zeichenfeld"></canvas>
+        <div class="hw-pad-actions">
+          <button type="button" id="hwPrev" aria-label="Vorheriges Zeichen">←</button>
+          <button type="button" id="hwUndo">↶ Rückgängig</button>
+          <button type="button" id="hwClear">Leeren</button>
+          <button type="button" id="hwAgain">＋ Variante</button>
+          <button type="button" id="hwNext" class="primary">Weiter →</button>
+        </div>
+        <p id="hwStatus" class="hw-status" role="status"></p>
+        <div id="hwVariants" class="hw-variants"></div>
+        <details class="hw-tips">
+          <summary>So geht's</summary>
+          <ul>
+            <li>Schreib jedes Zeichen mit Apple Pencil, Finger oder Maus in das Feld. Es steht auf der dicken <b>Grundlinie</b>.</li>
+            <li>Kleinbuchstaben reichen bis zur Linie „Kleinbuchstaben“, Großbuchstaben bis „Großbuchstaben“, g, j, p, q, y gehen nach unten.</li>
+            <li><b>Weiter →</b> speichert und springt zum nächsten Zeichen. Leeres Feld = Zeichen überspringen.</li>
+            <li>Mit <b>＋ Variante</b> schreibst du ein Zeichen mehrmals – dann sieht jedes „e“ im Text etwas anders aus, wie echt.</li>
+            <li>Fehlende Zeichen werden in der Schrift „Caveat“ ergänzt.</li>
+            <li>Die Buchstaben werden nur in diesem Browser gespeichert. Mit <b>Sichern</b> bekommst du eine Datei, die du auf einem anderen Gerät wieder <b>laden</b> kannst.</li>
+          </ul>
+        </details>
+      </section>
+
+      <section class="hw-chars" id="hwChars" aria-label="Zeichenübersicht"></section>
+    </div>
+
+    <footer class="hw-foot">
+      <button type="button" id="hwExport">💾 Sichern</button>
+      <label class="file-btn">📂 Laden<input type="file" id="hwImport" accept="application/json,.json"></label>
+      <button type="button" id="hwReset" class="danger">Alles löschen</button>
+    </footer>
+  </dialog>
+
   <script src="vendor/jspdf.umd.min.js" defer></script>
+  <script src="handwriting.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

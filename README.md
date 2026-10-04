@@ -4,6 +4,8 @@ Eine kleine Webseite, die getippten Text in realistisch wirkende Handschrift ver
 
 ## Funktionen
 
+- **Eigene Handschrift:** Buchstaben direkt auf der Seite mit Apple Pencil, Finger oder Maus
+  zeichnen (mit Druckempfindlichkeit und mehreren Varianten pro Zeichen)
 - 9 Handschrift-Schriftarten (von ordentlich bis krakelig, auch Schreibschrift)
 - Papier: liniert, kariert, blanko oder „altes Papier“, optional mit roter Randlinie
 - Tintenfarbe (Voreinstellungen oder eigene Farbe)
@@ -13,7 +15,19 @@ Eine kleine Webseite, die getippten Text in realistisch wirkende Handschrift ver
 - „Neu mischen“ erzeugt eine neue zufällige Variante
 - Automatischer Seitenumbruch (A4)
 - Export als PNG (pro Seite) oder PDF, oder direkt drucken
+- „Teilen“ öffnet auf iPad/iPhone das Teilen-Menü, z. B. um das PDF direkt in Goodnotes zu öffnen
 - Text und Einstellungen werden im Browser gespeichert
+
+## Eigene Handschrift
+
+1. Auf **„Eigene Handschrift zeichnen“** klicken.
+2. Jedes Zeichen in das Feld schreiben – es steht auf der dicken Grundlinie.
+   **Weiter →** speichert und springt zum nächsten Zeichen, **＋ Variante** speichert eine weitere Version.
+3. **Fertig** – die Schriftart „Meine Handschrift“ wird automatisch ausgewählt.
+   Noch nicht gezeichnete Zeichen werden in „Caveat“ ergänzt.
+
+Die Buchstaben werden nur im Browser gespeichert. Über **Sichern** / **Laden** lassen sie sich
+als Datei sichern und auf ein anderes Gerät übertragen.
 
 ## Benutzung
 
