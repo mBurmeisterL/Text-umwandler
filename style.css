@@ -1,0 +1,151 @@
+:root {
+  --bg: #f3f1ec;
+  --panel: #ffffff;
+  --text: #1f2328;
+  --muted: #6b6f76;
+  --border: #e2ded6;
+  --accent: #1d3a8a;
+  --accent-text: #ffffff;
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181b;
+    --panel: #212226;
+    --text: #e8e6e3;
+    --muted: #9a9ca1;
+    --border: #34363b;
+    --accent: #7c9cf5;
+    --accent-text: #0e1220;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+}
+
+.topbar {
+  padding: 20px 24px 8px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.topbar h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+.topbar p { margin: 4px 0 0; color: var(--muted); }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) 1fr;
+  gap: 24px;
+  padding: 16px 24px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { font-weight: 500; font-size: 0.9rem; display: flex; justify-content: space-between; }
+.field output { color: var(--muted); font-weight: 400; }
+
+textarea, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  width: 100%;
+}
+textarea { resize: vertical; min-height: 160px; line-height: 1.45; }
+textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.swatches button, .custom-color {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--panel);
+  box-shadow: 0 0 0 1px var(--border);
+  background: var(--c);
+  cursor: pointer;
+  padding: 0;
+}
+.swatches button.active, .custom-color.active { box-shadow: 0 0 0 2px var(--accent); }
+.custom-color {
+  position: relative;
+  overflow: hidden;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+}
+.custom-color input { opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+
+.check { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.actions button {
+  font: inherit;
+  font-weight: 500;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+}
+.actions button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+.actions button:hover { filter: brightness(1.08); }
+.actions button:disabled { opacity: 0.5; cursor: wait; }
+
+.hint { margin: 0; color: var(--muted); font-size: 0.85rem; min-height: 1.2em; }
+
+.preview #pages { display: flex; flex-direction: column; gap: 24px; align-items: center; }
+.preview canvas {
+  width: 100%;
+  max-width: 820px;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.12), 0 12px 32px rgba(0,0,0,.10);
+  background: #fff;
+}
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; padding: 12px 16px 32px; }
+  .topbar { padding: 16px 16px 4px; }
+  .panel { position: static; max-height: none; }
+}
+
+@media print {
+  @page { size: A4; margin: 0; }
+  body { background: #fff; }
+  .topbar, .panel { display: none; }
+  .layout { display: block; padding: 0; }
+  .preview #pages { gap: 0; }
+  .preview canvas {
+    width: 210mm; height: 297mm; max-width: none;
+    box-shadow: none; border-radius: 0;
+    break-after: page;
+  }
+}
