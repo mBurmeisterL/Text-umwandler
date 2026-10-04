@@ -529,6 +529,12 @@
   // Eigener Cloudflare Worker mit Workers AI (kein Schlüssel im Browser)
   // =====================================================================
 
+  const OLD_WORKER =
+    "Dein Cloudflare Worker läuft noch mit altem Code und kennt diese Funktion nicht. Bitte in Cloudflare unter " +
+    "„Edit code“ den kompletten Code aus cloudflare-worker/worker.js einfügen (in Zeile 1 muss „(Version 4)“ stehen) " +
+    "und auf „Deploy“ tippen.";
+  const NEWEST_WORKER = 4;
+
   async function workerCall(path, body) {
     const base = getKey("cloudflare").replace(/\/+$/, "");
     if (!base) throw new AiError("Bitte zuerst oben rechts unter „⚙️ KI-Einstellungen“ die Adresse deines Cloudflare Workers eintragen.");
@@ -544,6 +550,9 @@
     }
     let data = null;
     try { data = await res.json(); } catch (_) { /* keine JSON-Antwort */ }
+    if (res.status === 404 && data && /Unbekannte Funktion/.test(data.error || "")) {
+      throw new AiError(OLD_WORKER);
+    }
     if (!res.ok || !data || data.error) {
       throw new AiError((data && data.error) || `Der Worker hat mit Fehler ${res.status} geantwortet. Ist der Worker-Code eingefügt und deployt?`);
     }
@@ -586,7 +595,11 @@
     },
     async test() {
       const data = await workerCall("/test", {});
-      return { model: data.model, reply: data.reply || "" };
+      // Ältere Worker liefern keine Version mit – dann fehlen neue Funktionen wie das Übersetzen
+      if (!data.version || data.version < NEWEST_WORKER) {
+        throw new AiError("Die Verbindung klappt, aber " + OLD_WORKER.charAt(0).toLowerCase() + OLD_WORKER.slice(1));
+      }
+      return { model: `${data.model}, Worker-Version ${data.version}`, reply: data.reply || "" };
     },
   };
 
