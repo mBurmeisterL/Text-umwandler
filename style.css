@@ -352,6 +352,12 @@ input[type="range"]::-moz-range-thumb {
 .more { border-top: 1px dashed var(--border); padding-top: 10px; }
 .more > summary { cursor: pointer; font-size: .9rem; font-weight: 550; color: var(--muted); list-style-position: inside; }
 .more-body { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.synth-box {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; border-radius: 12px;
+  background: var(--accent-soft);
+}
+.synth-box select:disabled { opacity: .5; }
 
 /* ---------- Vorschau und Werkzeugleiste ---------- */
 

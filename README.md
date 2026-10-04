@@ -60,6 +60,13 @@ Danach **Fertig** – die Schriftart „Meine Handschrift“ wird automatisch au
 Im Text wird für jedes Vorkommen zufällig eine der Varianten benutzt (nie zweimal dieselbe direkt
 hintereinander). Noch fehlende Zeichen werden in „Caveat“ ergänzt.
 
+**Fehlende Zeichen im eigenen Stil:** Zeichen, die noch nicht geschrieben wurden, werden automatisch
+ergänzt (abschaltbar unter Feinabstimmung):
+- Ä, Ö, Ü aus dem eigenen A/a, O/o, U/u plus zwei Punkten in eigener Strichdicke
+- c, o, s, v, w, x, z (groß/klein gleiche Form) aus der jeweils anderen eigenen Variante, skaliert
+- alles andere aus der ähnlichsten Handschrift-Schrift, angepasst an die gemessene Höhe der Klein- und
+  Großbuchstaben, Strichdicke und Neigung der eigenen Schrift, mit drei leicht unterschiedlichen Varianten
+
 Die Buchstaben werden nur im Browser gespeichert. Über **Sichern** / **Laden** lassen sie sich
 als Datei sichern und auf ein anderes Gerät übertragen.
 

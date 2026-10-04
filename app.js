@@ -35,6 +35,8 @@
     spacing: $("spacing"),
     word: $("word"),
     pen: $("pen"),
+    synth: $("synth"),
+    synthBase: $("synthBase"),
     margin: $("margin"),
     pages: $("pages"),
     status: $("status"),
@@ -80,6 +82,8 @@
       spacing: Number(els.spacing.value),
       word: Number(els.word.value),
       pen: Number(els.pen.value),
+      synth: els.synth.checked,
+      synthBase: els.synthBase.value,
       margin: els.margin.checked,
     };
   }
@@ -106,6 +110,8 @@
     setVal(els.spacing, s.spacing);
     setVal(els.word, s.word);
     setVal(els.pen, s.pen);
+    setVal(els.synthBase, s.synthBase);
+    if (typeof s.synth === "boolean") els.synth.checked = s.synth;
     if (typeof s.margin === "boolean") els.margin.checked = s.margin;
     if (typeof s.ink === "string") state.ink = s.ink;
   }
@@ -171,6 +177,8 @@
     $("wordOut").textContent = els.word.value;
     $("penOut").textContent = els.pen.value;
     $("penField").hidden = els.font.value !== CUSTOM;
+    $("synthField").hidden = els.font.value !== CUSTOM;
+    els.synthBase.disabled = !els.synth.checked;
     for (const b of els.swatches.querySelectorAll("button")) {
       b.classList.toggle("active", b.dataset.color.toLowerCase() === state.ink.toLowerCase());
     }
@@ -206,9 +214,22 @@
       };
     }
 
-    const advance = (ch) => H.has(ch)
-      ? (H.avgWidth(ch) + H.GAP) * s.size
-      : measureCtx.measureText(ch).width;
+    // Eigene Varianten, sonst (falls eingeschaltet) im eigenen Stil erzeugte, sonst Ersatzschrift
+    const S = s.synth && window.HandschriftSynth;
+    const variantsOf = (ch) => (H.has(ch) ? H.variants(ch) : S ? S.variantsFor(ch, { pen: s.pen, base: s.synthBase }) : null);
+    const widthCache = new Map();
+    const avgWidth = (ch) => {
+      if (!widthCache.has(ch)) {
+        const vs = variantsOf(ch);
+        widthCache.set(ch, vs ? vs.reduce((a, v) => a + v.w, 0) / vs.length : null);
+      }
+      return widthCache.get(ch);
+    };
+    const synthesized = new Set();
+    const advance = (ch) => {
+      const w = avgWidth(ch);
+      return w != null ? (w + H.GAP) * s.size : measureCtx.measureText(ch).width;
+    };
     const penWidth = s.size * 0.01 * s.pen;
     const lastVariant = {};
     return {
@@ -218,16 +239,18 @@
         let x = 0;
         return [...word].map((ch) => { const p = x; x += advance(ch) + s.spacing; return p; });
       },
+      synthesized,
       draw(ctx, ch, rnd) {
-        if (!H.has(ch)) { ctx.fillText(ch, 0, 0); return; }
-        const vs = H.variants(ch);
+        const vs = variantsOf(ch);
+        if (!vs) { ctx.fillText(ch, 0, 0); return; }
+        if (!H.has(ch)) synthesized.add(ch);
         // Zufällige Variante, aber nie zweimal dieselbe direkt hintereinander
         const n = vs.length;
         let idx = Math.floor(rnd() * n) % n;
         if (n > 1 && idx === lastVariant[ch]) idx = (idx + 1 + Math.floor(rnd() * (n - 1))) % n;
         lastVariant[ch] = idx;
         const v = vs[idx];
-        H.drawGlyph(ctx, v, s.size, penWidth, ((H.avgWidth(ch) - v.w) / 2) * s.size);
+        H.drawGlyph(ctx, v, s.size, penWidth, ((avgWidth(ch) - v.w) / 2) * s.size);
       },
     };
   }
@@ -403,6 +426,7 @@
       await document.fonts.load(fontString(fontName, s.size), "AaÄäÖöÜüß");
     } catch (_) { /* Fallback-Schrift wird verwendet */ }
     if (window.Handschrift) await window.Handschrift.ready();
+    if (s.font === CUSTOM && s.synth && window.HandschriftSynth) await window.HandschriftSynth.prepare();
     if (token !== renderToken) return;
 
     const measure = document.createElement("canvas").getContext("2d");
@@ -441,8 +465,16 @@
     let msg = pageCount === 1 ? "1 Seite" : `${pageCount} Seiten`;
     if (s.font === CUSTOM && !(window.Handschrift && window.Handschrift.count())) {
       msg = "Noch keine eigenen Buchstaben – klicke auf „Eigene Handschrift zeichnen“.";
+    } else if (pv.synthesized && pv.synthesized.size) {
+      const list = [...pv.synthesized].sort().join(" ");
+      msg += ` · ${pv.synthesized.size} Zeichen im Stil deiner Handschrift ergänzt: ${list}`;
     }
     els.status.textContent = msg;
+    const S = window.HandschriftSynth;
+    $("synthInfo").textContent = s.font === CUSTOM && s.synth && S && S.style()
+      ? "Ä, Ö, Ü und gleich geformte Groß-/Kleinbuchstaben (c, o, s, v, w, x, z) werden aus deinen eigenen Buchstaben gebaut, " +
+        `alles andere aus „${s.synthBase || S.chosenFont()}“ – angepasst an Größe, Strichdicke und Neigung deiner Schrift.`
+      : "";
   }
 
   let timer = null;
@@ -751,12 +783,15 @@
     updateOutputs();
 
     window.Handschrift.init();
-    window.Handschrift.onChange(scheduleRender);
+    window.Handschrift.onChange(() => {
+      if (window.HandschriftSynth) window.HandschriftSynth.invalidate();
+      scheduleRender();
+    });
     window.HandschriftVorlage.init();
     window.HandschriftScan.init();
     initAi();
 
-    for (const el of [els.text, els.font, els.paper, els.size, els.line, els.mess, els.spacing, els.word, els.pen, els.margin]) {
+    for (const el of [els.text, els.font, els.paper, els.size, els.line, els.mess, els.spacing, els.word, els.pen, els.margin, els.synth, els.synthBase]) {
       el.addEventListener("input", () => { updateOutputs(); scheduleRender(); });
       el.addEventListener("change", () => { updateOutputs(); scheduleRender(); });
     }
