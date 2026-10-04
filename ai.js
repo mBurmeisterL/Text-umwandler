@@ -130,6 +130,17 @@
       return text;
     },
 
+    async test() {
+      const message = await claudeClient().beta.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 1000,
+        output_config: { effort: "low" },
+        messages: [{ role: "user", content: "Antworte nur mit dem Wort OK." }],
+        ...CLAUDE_FALLBACK,
+      });
+      return { model: CLAUDE_MODEL, reply: claudeText(message).trim() };
+    },
+
     async correctText(text) {
       const message = await claudeClient().beta.messages.create({
         model: CLAUDE_MODEL,
@@ -236,18 +247,31 @@
     required: ["items"],
   };
 
+  // Fehler mit Status und Originalmeldung von Google (hilft bei der Fehlersuche)
   function geminiError(status, msg) {
-    if ((status === 400 || status === 401) && /api key/i.test(msg)) return new AiError("Der Gemini-API-Schlüssel ist ungültig.");
-    if (status === 403) return new AiError("Der Gemini-API-Schlüssel hat keine Berechtigung dafür.");
-    if (status === 404) return new AiError("Dieses Gemini-Modell gibt es nicht (mehr) – bitte in den KI-Einstellungen ein anderes wählen.");
-    if (status === 429) return new AiError("Gemini-Limit erreicht (beim kostenlosen Zugang gibt es Grenzen pro Minute und Tag) – bitte etwas warten.");
-    if (status >= 500) return new AiError("Gemini ist gerade überlastet – bitte gleich nochmal versuchen.");
-    return new AiError(`Gemini-Fehler (${status})${msg ? ": " + msg : ""}`);
+    const detail = msg ? ` (Google: ${msg.length > 180 ? msg.slice(0, 180) + "…" : msg})` : "";
+    let text;
+    if ((status === 400 || status === 401) && /api key|api_key/i.test(msg)) text = "Der Gemini-API-Schlüssel ist ungültig. Bitte den Schlüssel von aistudio.google.com/apikey neu kopieren.";
+    else if (status === 400 && /location|region|country/i.test(msg)) text = "Gemini ist in deinem Land bzw. deiner Region nicht verfügbar.";
+    else if (status === 403) text = "Der Gemini-Schlüssel hat dafür keine Berechtigung.";
+    else if (status === 404) text = "Dieses Gemini-Modell gibt es nicht (mehr).";
+    else if (status === 429 && /limit:\s*0\b/i.test(msg)) text = "Dieses Gemini-Modell ist im kostenlosen Zugang nicht freigeschaltet.";
+    else if (status === 429) text = "Gemini-Limit erreicht (der kostenlose Zugang erlaubt nur eine bestimmte Zahl Anfragen pro Minute und Tag).";
+    else if (status >= 500) text = "Gemini ist gerade überlastet – bitte gleich nochmal versuchen.";
+    else text = `Gemini-Fehler ${status}.`;
+    const err = new AiError(text + detail);
+    err.status = status;
+    err.keyProblem = /Schlüssel/.test(text);
+    return err;
   }
 
   async function geminiFetch(path, body) {
     const key = getKey("gemini");
-    if (!key) throw new AiError("Bitte zuerst unter „KI-Einstellungen“ einen Gemini-API-Schlüssel eintragen.");
+    if (!key) {
+      const err = new AiError("Bitte zuerst unter „KI-Einstellungen“ einen Gemini-API-Schlüssel eintragen.");
+      err.keyProblem = true;
+      throw err;
+    }
     let res;
     try {
       res = await fetch(`${GEMINI_BASE}/${path}`, {
@@ -256,7 +280,7 @@
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (_) {
-      throw new AiError("Keine Verbindung zur KI – bitte Internet prüfen.");
+      throw new AiError("Keine Verbindung zu Gemini – bitte Internet prüfen.");
     }
     if (!res.ok) {
       let msg = "";
@@ -274,35 +298,69 @@
       .map((m) => ({ id: m.name.replace(/^models\//, ""), label: m.displayName || m.name }));
   }
 
-  // Neuestes stabiles Flash-Modell (schnell, im kostenlosen Zugang enthalten)
-  function pickGeminiModel(models) {
+  // Reihenfolge, in der Modelle automatisch probiert werden:
+  // erst Googles Alias auf das aktuelle Flash-Modell, dann stabile Flash-Versionen (neueste zuerst), dann Flash-Lite
+  function geminiCandidates(models) {
+    const ids = models.map((m) => m.id);
     const version = (id, kind) => {
       const m = id.match(new RegExp(`^gemini-(\\d+(?:\\.\\d+)?)-${kind}$`));
       return m ? parseFloat(m[1]) : -1;
     };
-    for (const kind of ["flash", "pro"]) {
-      const best = models
-        .map((m) => ({ id: m.id, v: version(m.id, kind) }))
-        .filter((m) => m.v >= 0)
-        .sort((a, b) => b.v - a.v)[0];
-      if (best) return best.id;
-    }
-    return GEMINI_FALLBACK_MODEL;
+    const byVersion = (kind) => ids.filter((id) => version(id, kind) >= 0).sort((a, b) => version(b, kind) - version(a, kind));
+    const out = [];
+    if (ids.includes("gemini-flash-latest")) out.push("gemini-flash-latest");
+    out.push(...byVersion("flash"));
+    if (ids.includes("gemini-flash-lite-latest")) out.push("gemini-flash-lite-latest");
+    out.push(...byVersion("flash-lite"));
+    if (!out.length) out.push(GEMINI_FALLBACK_MODEL, "gemini-2.5-flash");
+    return [...new Set(out)];
   }
 
-  let autoModel = null;
-  async function geminiModel() {
+  const pickGeminiModel = (models) => geminiCandidates(models)[0];
+
+  // Diese Fehler hängen am Modell – dann lohnt es sich, ein anderes zu probieren
+  const modelProblem = (e) => !e.keyProblem && [403, 404, 429].includes(e.status) || (e.status === 400 && !e.keyProblem);
+
+  let workingModel = null;
+
+  // Führt fn(modell) aus; im Automatik-Modus werden bei Modellproblemen weitere Modelle probiert
+  async function withGeminiModel(fn) {
     const chosen = read(STORE.geminiModel);
-    if (chosen) return chosen;
-    if (!autoModel) {
+    if (chosen) {
       try {
-        autoModel = pickGeminiModel(await listGeminiModels());
+        return { result: await fn(chosen), model: chosen };
       } catch (e) {
-        if (/Schlüssel/.test(e.message)) throw e;
-        autoModel = GEMINI_FALLBACK_MODEL;
+        if (modelProblem(e)) e.message += " Tipp: In den KI-Einstellungen bei „Gemini-Modell“ auf „Automatisch“ stellen.";
+        throw e;
       }
     }
-    return autoModel;
+    if (workingModel) {
+      try {
+        return { result: await fn(workingModel), model: workingModel };
+      } catch (e) {
+        if (!modelProblem(e)) throw e;
+        workingModel = null;
+      }
+    }
+    let list;
+    try {
+      list = geminiCandidates(await listGeminiModels());
+    } catch (e) {
+      if (e.keyProblem) throw e;
+      list = [GEMINI_FALLBACK_MODEL, "gemini-2.5-flash"];
+    }
+    let lastError = null;
+    for (const model of list.slice(0, 5)) {
+      try {
+        const result = await fn(model);
+        workingModel = model;
+        return { result, model };
+      } catch (e) {
+        if (!modelProblem(e)) throw e;
+        lastError = e;
+      }
+    }
+    throw lastError;
   }
 
   function checkBlocked(data) {
@@ -320,21 +378,23 @@
   }
 
   async function geminiGenerate(body) {
-    const model = await geminiModel();
-    const data = await (await geminiFetch(`models/${encodeURIComponent(model)}:generateContent`, body)).json();
-    checkBlocked(data);
-    const truncated = data.candidates && data.candidates[0] && data.candidates[0].finishReason === "MAX_TOKENS";
-    return { text: geminiParts(data), truncated };
+    const { result } = await withGeminiModel(async (model) => {
+      const data = await (await geminiFetch(`models/${encodeURIComponent(model)}:generateContent`, body)).json();
+      checkBlocked(data);
+      const truncated = data.candidates && data.candidates[0] && data.candidates[0].finishReason === "MAX_TOKENS";
+      return { text: geminiParts(data), truncated };
+    });
+    return result;
   }
 
   const gemini = {
     async writeText(instruction, currentText, onText) {
-      const model = await geminiModel();
-      const res = await geminiFetch(`models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
-        systemInstruction: { parts: [{ text: WRITE_SYSTEM }] },
-        contents: [{ role: "user", parts: [{ text: writePrompt(instruction, currentText) }] }],
-        generationConfig: { maxOutputTokens: 8192 },
-      });
+      const { result: res } = await withGeminiModel((model) =>
+        geminiFetch(`models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+          systemInstruction: { parts: [{ text: WRITE_SYSTEM }] },
+          contents: [{ role: "user", parts: [{ text: writePrompt(instruction, currentText) }] }],
+          generationConfig: { maxOutputTokens: 16384 },
+        }));
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "", acc = "";
@@ -354,8 +414,20 @@
         }
       }
       const text = acc.trim();
+      if (!text) throw new AiError("Gemini hat keinen Text geliefert – bitte nochmal versuchen.");
       onText(text);
       return text;
+    },
+
+    async test() {
+      const { result, model } = await withGeminiModel(async (m) => {
+        const data = await (await geminiFetch(`models/${encodeURIComponent(m)}:generateContent`, {
+          contents: [{ role: "user", parts: [{ text: "Antworte nur mit dem Wort OK." }] }],
+        })).json();
+        checkBlocked(data);
+        return geminiParts(data);
+      });
+      return { model, reply: result.trim() };
     },
 
     async correctText(text) {
@@ -407,12 +479,14 @@
     setKey,
     hasKey: () => !!getKey(),
     getGeminiModel: () => read(STORE.geminiModel),
-    setGeminiModel: (m) => { write(STORE.geminiModel, m); autoModel = null; },
+    setGeminiModel: (m) => { write(STORE.geminiModel, m); workingModel = null; },
+    getWorkingGeminiModel: () => workingModel,
     listGeminiModels,
     pickGeminiModel,
     writeText: (...a) => impl().writeText(...a),
     correctText: (...a) => impl().correctText(...a),
     labelGlyphs: (...a) => impl().labelGlyphs(...a),
+    test: () => impl().test(),
     friendlyError,
   };
 })();
