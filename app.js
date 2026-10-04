@@ -459,6 +459,107 @@
     els.status.textContent = "Dieser Browser kann nicht direkt teilen – das PDF wurde heruntergeladen. In Goodnotes über „Importieren“ öffnen.";
   }
 
+  // ---------- KI-Helfer ----------
+
+  function initAi() {
+    const KI = window.HandschriftKI;
+    const status = $("aiStatus");
+    const buttons = ["aiWrite", "aiRewrite", "aiCorrect"].map($);
+    const keyInput = $("aiKey");
+    let undoText = null;
+
+    const setText = (t) => {
+      els.text.value = t;
+      updateOutputs();
+      scheduleRender();
+    };
+    const busy = (on) => buttons.forEach((b) => { b.disabled = on; });
+    const remember = () => {
+      undoText = els.text.value;
+      $("aiUndo").hidden = false;
+    };
+
+    async function run(label, fn) {
+      if (!KI.hasKey()) {
+        status.textContent = "Bitte zuerst einen API-Schlüssel eintragen.";
+        $("aiSettings").open = true;
+        keyInput.focus();
+        return;
+      }
+      busy(true);
+      status.textContent = label;
+      try {
+        await fn();
+      } catch (e) {
+        status.textContent = KI.friendlyError(e);
+        if (undoText !== null && !els.text.value.trim()) setText(undoText);
+      } finally {
+        busy(false);
+      }
+    }
+
+    $("aiWrite").addEventListener("click", () => {
+      const prompt = $("aiPrompt").value.trim();
+      if (!prompt) { status.textContent = "Schreib oben hinein, was für einen Text du brauchst."; return; }
+      run("Die KI schreibt …", async () => {
+        remember();
+        await KI.writeText(prompt, "", setText);
+        status.textContent = "Fertig. Gefällt dir etwas nicht? Schreib oben, was anders sein soll, und tippe auf „Text überarbeiten“.";
+      });
+    });
+
+    $("aiRewrite").addEventListener("click", () => {
+      const prompt = $("aiPrompt").value.trim();
+      const current = els.text.value.trim();
+      if (!current) { status.textContent = "Es gibt noch keinen Text zum Überarbeiten."; return; }
+      if (!prompt) { status.textContent = "Schreib oben hinein, was an deinem Text geändert werden soll (z. B. „kürzer und lustiger“)."; return; }
+      run("Die KI überarbeitet deinen Text …", async () => {
+        remember();
+        await KI.writeText(prompt, current, setText);
+        status.textContent = "Text überarbeitet.";
+      });
+    });
+
+    $("aiCorrect").addEventListener("click", () => {
+      const current = els.text.value;
+      if (!current.trim()) { status.textContent = "Es gibt noch keinen Text zum Prüfen."; return; }
+      run("Prüfe Rechtschreibung …", async () => {
+        const res = await KI.correctText(current);
+        if (!res.changes.length || res.corrected === current) {
+          status.textContent = "Keine Fehler gefunden. 👍";
+          return;
+        }
+        remember();
+        setText(res.corrected);
+        const list = res.changes.slice(0, 8).map((c) => `${c.original} → ${c.korrektur}`).join(", ");
+        status.textContent = `${res.changes.length} Korrektur${res.changes.length > 1 ? "en" : ""}: ${list}${res.changes.length > 8 ? " …" : ""}`;
+      });
+    });
+
+    $("aiUndo").addEventListener("click", () => {
+      if (undoText === null) return;
+      setText(undoText);
+      undoText = null;
+      $("aiUndo").hidden = true;
+      status.textContent = "Rückgängig gemacht.";
+    });
+
+    keyInput.value = KI.getKey() ? "••••••••••••" : "";
+    $("aiKeySave").addEventListener("click", () => {
+      const key = keyInput.value.trim();
+      if (!key || /^•+$/.test(key)) { status.textContent = "Bitte einen Schlüssel einfügen."; return; }
+      KI.setKey(key);
+      keyInput.value = "••••••••••••";
+      status.textContent = "Schlüssel gespeichert.";
+    });
+    $("aiKeyDelete").addEventListener("click", () => {
+      KI.setKey("");
+      keyInput.value = "";
+      status.textContent = "Schlüssel gelöscht.";
+    });
+    keyInput.addEventListener("focus", () => { if (/^•+$/.test(keyInput.value)) keyInput.value = ""; });
+  }
+
   // ---------- Events ----------
 
   function init() {
@@ -468,6 +569,8 @@
     window.Handschrift.init();
     window.Handschrift.onChange(scheduleRender);
     window.HandschriftVorlage.init();
+    window.HandschriftScan.init();
+    initAi();
 
     for (const el of [els.text, els.font, els.paper, els.size, els.line, els.mess, els.spacing, els.word, els.pen, els.margin]) {
       el.addEventListener("input", () => { updateOutputs(); scheduleRender(); });

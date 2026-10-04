@@ -20,7 +20,7 @@ Eine kleine Webseite, die getippten Text in realistisch wirkende Handschrift ver
 
 ## Eigene Handschrift
 
-Es gibt zwei Wege, die eigene Handschrift einzulesen:
+Es gibt drei Wege, die eigene Handschrift einzulesen:
 
 **A) Vorlage ausfüllen (z. B. in Goodnotes)**
 
@@ -31,7 +31,14 @@ Es gibt zwei Wege, die eigene Handschrift einzulesen:
    **📷 Ausgefüllte Seiten hochladen** einlesen. Die Seite findet die Kästchen über die schwarzen
    Ecken-Markierungen und erkennt die Seitennummer automatisch.
 
-**B) Direkt auf der Webseite zeichnen**
+**B) Beliebige Seite mit KI lesen**
+
+Eine ganz normal beschriebene Seite (Bild, PDF oder Foto) hochladen: Die Webseite zerlegt die Tinte in
+einzelne Stücke, die KI (Claude) bestimmt, welches Zeichen jedes Stück ist, und in einer Kontrollansicht
+lassen sich Fehler korrigieren. Funktioniert am besten mit Druckschrift; verbundene Schreibschrift lässt
+sich kaum in einzelne Buchstaben zerlegen. Braucht einen API-Schlüssel (siehe unten).
+
+**C) Direkt auf der Webseite zeichnen**
 
 1. Auf **„Eigene Handschrift zeichnen“** klicken.
 2. Unter **„Jedes Zeichen“** einstellen, wie oft jedes Zeichen geschrieben werden soll (z. B. 3×).
@@ -44,6 +51,21 @@ hintereinander). Noch fehlende Zeichen werden in „Caveat“ ergänzt.
 
 Die Buchstaben werden nur im Browser gespeichert. Über **Sichern** / **Laden** lassen sie sich
 als Datei sichern und auf ein anderes Gerät übertragen.
+
+## KI-Helfer
+
+Im Bereich **🤖 KI-Helfer** unter dem Textfeld:
+
+- **✨ Text schreiben** – beschreiben, was gebraucht wird („Dankesbrief an Oma für das Geschenk“),
+  der Text erscheint direkt in Handschrift
+- **✏️ Text überarbeiten** – den vorhandenen Text nach Wunsch ändern lassen („kürzer und lustiger“)
+- **✔️ Rechtschreibung prüfen** – korrigiert nur Fehler und listet die Änderungen auf
+- **↶ Rückgängig** – stellt den Text vor der letzten KI-Änderung wieder her
+
+Dafür wird ein API-Schlüssel von [console.anthropic.com](https://console.anthropic.com/settings/keys)
+benötigt (Abrechnung pro Nutzung, meist wenige Cent pro Anfrage). Er wird unter **KI-Einstellungen**
+eingetragen, nur im Browser gespeichert und direkt an die Claude API geschickt – deshalb nur auf
+eigenen Geräten verwenden.
 
 ## Benutzung
 
@@ -64,3 +86,4 @@ python3 -m http.server 8000
 - Schriften: Google Fonts, SIL Open Font License 1.1 (Homemade Apple: Apache License 2.0)
 - [jsPDF](https://github.com/parallax/jsPDF): MIT-Lizenz (`vendor/jspdf.LICENSE`)
 - [PDF.js](https://github.com/mozilla/pdf.js): Apache License 2.0 (`vendor/pdfjs/LICENSE`)
+- [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript): MIT-Lizenz, als Browser-Bundle (`vendor/anthropic/`)
