@@ -406,7 +406,7 @@
   // ---------- Oberfläche ----------
 
   async function sendTemplate() {
-    if (!window.jspdf) { H().setStatus("PDF-Bibliothek fehlt."); return; }
+    if (!window.jspdf) { H().sectionStatus("tplStatus")("PDF-Bibliothek fehlt.", "error"); return; }
     const pdf = buildTemplate();
     const file = new File([pdf.output("blob")], "handschrift-vorlage.pdf", { type: "application/pdf" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -421,7 +421,8 @@
   }
 
   async function importFiles(files) {
-    const status = H().setStatus;
+    const say = H().sectionStatus("tplStatus", "hwScanBtn");
+    const status = (msg) => say(msg, "busy");
     const report = [];
     let total = 0;
     try {
@@ -450,7 +451,8 @@
         }
       }
     } finally {
-      status(report.join(" ") || "Keine Seiten gefunden.");
+      const failed = !total;
+      say((failed ? "❌ " : "✅ ") + (report.join(" ") || "Keine Seiten gefunden."), failed ? "error" : "ok");
     }
     return total;
   }

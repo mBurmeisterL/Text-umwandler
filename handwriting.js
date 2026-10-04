@@ -458,6 +458,23 @@
     return !overlay.hidden;
   }
 
+  // Meldung direkt unter einem Upload-Button; kind: "busy" | "error" | "ok"
+  function sectionStatus(statusId, buttonId) {
+    return (msg, kind) => {
+      const el = $(statusId);
+      el.textContent = msg || "";
+      el.hidden = !msg;
+      el.className = "scan-status" + (kind ? " " + kind : "");
+      const btn = buttonId && $(buttonId);
+      if (btn) {
+        btn.classList.toggle("disabled", kind === "busy");
+        const input = btn.querySelector("input");
+        if (input) input.disabled = kind === "busy";
+      }
+      if (msg) el.scrollIntoView({ block: "nearest" });
+    };
+  }
+
   // Übernimmt Zeichen aus einer eingelesenen Vorlage; gleiche Kästchen ersetzen frühere Importe
   function importGlyphs(list) {
     commitDraft();
@@ -558,6 +575,7 @@
     ready,
     importGlyphs,
     setStatus: (msg) => setStatus(msg),
+    sectionStatus,
     open,
     onClose: (fn) => closeListeners.push(fn),
     has: (ch) => !!glyphs[ch],

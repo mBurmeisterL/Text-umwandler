@@ -261,6 +261,29 @@ body.modal-open { overflow: hidden; }
 }
 .hw-import p { margin: 0; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
 .hw-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.scan-status {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  display: flex; align-items: center; gap: 8px;
+}
+.scan-status.error { border-color: #d9534f; color: #c0392b; }
+.scan-status.ok { border-color: #2e7d32; }
+.scan-status.busy::before {
+  content: "";
+  flex: none;
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.file-btn.disabled { opacity: .5; pointer-events: none; }
 .hw .file-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 500; }
 .hw-current strong { font-size: 1.6rem; margin-left: 4px; }
 .muted { color: var(--muted); font-size: 0.85rem; }
