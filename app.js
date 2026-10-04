@@ -11,6 +11,8 @@
   const TEXT_RIGHT = PAGE_W - 90;
 
   const STORAGE_KEY = "text-umwandler:v1";
+  const CUSTOM = "__custom__";
+  const FALLBACK_FONT = "Caveat";
 
   const DEFAULT_TEXT =
     "Liebe Oma,\n\n" +
@@ -32,6 +34,7 @@
     mess: $("mess"),
     spacing: $("spacing"),
     word: $("word"),
+    pen: $("pen"),
     margin: $("margin"),
     pages: $("pages"),
     status: $("status"),
@@ -76,6 +79,7 @@
       mess: Number(els.mess.value),
       spacing: Number(els.spacing.value),
       word: Number(els.word.value),
+      pen: Number(els.pen.value),
       margin: els.margin.checked,
     };
   }
@@ -101,6 +105,7 @@
     setVal(els.mess, s.mess);
     setVal(els.spacing, s.spacing);
     setVal(els.word, s.word);
+    setVal(els.pen, s.pen);
     if (typeof s.margin === "boolean") els.margin.checked = s.margin;
     if (typeof s.ink === "string") state.ink = s.ink;
   }
@@ -111,6 +116,8 @@
     $("messOut").textContent = els.mess.value;
     $("spacingOut").textContent = els.spacing.value;
     $("wordOut").textContent = els.word.value;
+    $("penOut").textContent = els.pen.value;
+    $("penField").hidden = els.font.value !== CUSTOM;
     for (const b of els.swatches.querySelectorAll("button")) {
       b.classList.toggle("active", b.dataset.color.toLowerCase() === state.ink.toLowerCase());
     }
@@ -123,13 +130,52 @@
 
   // ---------- Textumbruch ----------
 
-  function wordWidth(ctx, word, s) {
-    return ctx.measureText(word).width + s.spacing * word.length;
+  // Kapselt, wie Zeichen gemessen und gezeichnet werden: Schriftart oder eigene Handschrift
+  function makeProvider(measureCtx, s) {
+    const H = window.Handschrift;
+    const custom = s.font === CUSTOM && H;
+    measureCtx.font = fontString(custom ? FALLBACK_FONT : s.font, s.size);
+
+    if (!custom) {
+      return {
+        space: measureCtx.measureText(" ").width + s.word,
+        width: (word) => measureCtx.measureText(word).width + s.spacing * [...word].length,
+        // Position über das Präfix messen, damit Kerning der Schrift erhalten bleibt
+        positions(word) {
+          let prefix = "";
+          return [...word].map((ch, i) => {
+            const x = measureCtx.measureText(prefix).width + i * s.spacing;
+            prefix += ch;
+            return x;
+          });
+        },
+        draw: (ctx, ch) => ctx.fillText(ch, 0, 0),
+      };
+    }
+
+    const advance = (ch) => H.has(ch)
+      ? (H.avgWidth(ch) + H.GAP) * s.size
+      : measureCtx.measureText(ch).width;
+    const penWidth = s.size * 0.01 * s.pen;
+    return {
+      space: 0.32 * s.size + s.word,
+      width: (word) => [...word].reduce((a, ch) => a + advance(ch) + s.spacing, 0),
+      positions(word) {
+        let x = 0;
+        return [...word].map((ch) => { const p = x; x += advance(ch) + s.spacing; return p; });
+      },
+      draw(ctx, ch, rnd) {
+        if (!H.has(ch)) { ctx.fillText(ch, 0, 0); return; }
+        const vs = H.variants(ch);
+        const v = vs[Math.floor(rnd() * vs.length) % vs.length];
+        H.drawGlyph(ctx, v, s.size, penWidth, ((H.avgWidth(ch) - v.w) / 2) * s.size);
+      },
+    };
   }
 
-  function wrap(ctx, s) {
+  function wrap(pv, s) {
     const maxW = TEXT_RIGHT - TEXT_LEFT;
-    const spaceW = ctx.measureText(" ").width + s.word;
+    const spaceW = pv.space;
     const lines = [];
     const paragraphs = s.text.replace(/\r/g, "").replace(/\t/g, "    ").split("\n");
 
@@ -141,14 +187,14 @@
       let curW = 0;
       for (let w of words) {
         // Überlange Wörter zerlegen
-        while (wordWidth(ctx, w, s) > maxW) {
+        while (pv.width(w) > maxW) {
           let cut = w.length - 1;
-          while (cut > 1 && wordWidth(ctx, w.slice(0, cut) + "-", s) > maxW) cut--;
+          while (cut > 1 && pv.width(w.slice(0, cut) + "-") > maxW) cut--;
           if (cur.length) { lines.push(cur); cur = []; curW = 0; }
           lines.push([w.slice(0, cut) + "-"]);
           w = w.slice(cut);
         }
-        const ww = wordWidth(ctx, w, s);
+        const ww = pv.width(w);
         const needed = cur.length ? curW + spaceW + ww : ww;
         if (needed > maxW && cur.length) {
           lines.push(cur);
@@ -246,11 +292,11 @@
 
   // ---------- Schrift ----------
 
-  function fontString(s, size) {
-    return `${size}px "${s.font}", cursive`;
+  function fontString(font, size) {
+    return `${size}px "${font}", cursive`;
   }
 
-  function drawLine(ctx, words, baseY, s, rnd) {
+  function drawLine(ctx, pv, words, baseY, s, rnd) {
     const m = s.mess / 10; // 0..1
     const scale = s.size / 46;
     const slope = (rnd() - 0.5) * 0.012 * m;            // leichte Schräglage der Zeile
@@ -258,17 +304,13 @@
     const wavePhase = rnd() * Math.PI * 2;
     const waveLen = 300 + rnd() * 400;
     let x = TEXT_LEFT + (rnd() - 0.3) * 14 * m;
-    const spaceW = ctx.measureText(" ").width + s.word;
-
     for (const word of words) {
       const wordScale = 1 + (rnd() - 0.5) * 0.06 * m;
       const chars = [...word];
-      let prefix = "";
+      const pos = pv.positions(word);
       for (let i = 0; i < chars.length; i++) {
         const ch = chars[i];
-        // Position über das Präfix messen, damit Kerning der Schrift erhalten bleibt
-        const cx = x + ctx.measureText(prefix).width + i * s.spacing;
-        prefix += ch;
+        const cx = x + pos[i];
         if (ch === " ") continue;
 
         const dx = (rnd() - 0.5) * 1.6 * m * scale;
@@ -283,10 +325,10 @@
         ctx.translate(cx + dx, baseY + dy);
         ctx.rotate(rot);
         ctx.scale(sc, sc);
-        ctx.fillText(ch, 0, 0);
+        pv.draw(ctx, ch, rnd);
         ctx.restore();
       }
-      x += wordWidth(ctx, word, s) + spaceW + (rnd() - 0.5) * 8 * m * scale;
+      x += pv.width(word) + pv.space + (rnd() - 0.5) * 8 * m * scale;
     }
   }
 
@@ -297,14 +339,15 @@
   async function render() {
     const token = ++renderToken;
     const s = settings();
+    const fontName = s.font === CUSTOM ? FALLBACK_FONT : s.font;
     try {
-      await document.fonts.load(fontString(s, s.size), "AaÄäÖöÜüß");
+      await document.fonts.load(fontString(fontName, s.size), "AaÄäÖöÜüß");
     } catch (_) { /* Fallback-Schrift wird verwendet */ }
     if (token !== renderToken) return;
 
     const measure = document.createElement("canvas").getContext("2d");
-    measure.font = fontString(s, s.size);
-    const lines = wrap(measure, s);
+    const pv = makeProvider(measure, s);
+    const lines = wrap(pv, s);
 
     const linesPerPage = Math.max(1, Math.floor((PAGE_H - MARGIN_TOP - MARGIN_BOTTOM) / s.line));
     const pageCount = Math.max(1, Math.ceil(lines.length / linesPerPage));
@@ -324,18 +367,22 @@
       const ctx = canvas.getContext("2d");
       drawPaper(ctx, s, linesPerPage);
 
-      ctx.font = fontString(s, s.size);
+      ctx.font = measure.font;
       ctx.fillStyle = s.ink;
       ctx.textBaseline = "alphabetic";
 
       const pageLines = lines.slice(p * linesPerPage, (p + 1) * linesPerPage);
       pageLines.forEach((words, i) => {
         const baseY = MARGIN_TOP + s.line * (i + 1) - Math.max(2, s.size * 0.06);
-        drawLine(ctx, words, baseY, s, rngFor(state.seed, p, i));
+        drawLine(ctx, pv, words, baseY, s, rngFor(state.seed, p, i));
       });
     }
 
-    els.status.textContent = pageCount === 1 ? "1 Seite" : `${pageCount} Seiten`;
+    let msg = pageCount === 1 ? "1 Seite" : `${pageCount} Seiten`;
+    if (s.font === CUSTOM && !(window.Handschrift && window.Handschrift.count())) {
+      msg = "Noch keine eigenen Buchstaben – klicke auf „Eigene Handschrift zeichnen“.";
+    }
+    els.status.textContent = msg;
   }
 
   let timer = null;
@@ -370,17 +417,39 @@
     }
   }
 
-  function exportPdf() {
+  function buildPdf() {
     if (!window.jspdf) {
       els.status.textContent = "PDF-Bibliothek konnte nicht geladen werden – bitte „Drucken“ → „Als PDF speichern“ nutzen.";
-      return;
+      return null;
     }
     const pdf = new window.jspdf.jsPDF({ orientation: "p", unit: "mm", format: "a4" });
     canvases().forEach((c, i) => {
       if (i > 0) pdf.addPage();
       pdf.addImage(c.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
     });
+    return pdf;
+  }
+
+  function exportPdf() {
+    const pdf = buildPdf();
+    if (pdf) pdf.save("handschrift.pdf");
+  }
+
+  // Öffnet auf iPad/iPhone das Teilen-Menü (z. B. „In Goodnotes öffnen“)
+  async function sharePdf() {
+    const pdf = buildPdf();
+    if (!pdf) return;
+    const file = new File([pdf.output("blob")], "handschrift.pdf", { type: "application/pdf" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "Handschrift" });
+      } catch (e) {
+        if (e.name !== "AbortError") pdf.save("handschrift.pdf");
+      }
+      return;
+    }
     pdf.save("handschrift.pdf");
+    els.status.textContent = "Dieser Browser kann nicht direkt teilen – das PDF wurde heruntergeladen. In Goodnotes über „Importieren“ öffnen.";
   }
 
   // ---------- Events ----------
@@ -389,7 +458,10 @@
     load();
     updateOutputs();
 
-    for (const el of [els.text, els.font, els.paper, els.size, els.line, els.mess, els.spacing, els.word, els.margin]) {
+    window.Handschrift.init();
+    window.Handschrift.onChange(scheduleRender);
+
+    for (const el of [els.text, els.font, els.paper, els.size, els.line, els.mess, els.spacing, els.word, els.pen, els.margin]) {
       el.addEventListener("input", () => { updateOutputs(); scheduleRender(); });
       el.addEventListener("change", () => { updateOutputs(); scheduleRender(); });
     }
@@ -414,6 +486,15 @@
     $("png").addEventListener("click", exportPng);
     $("pdf").addEventListener("click", exportPdf);
     $("print").addEventListener("click", () => window.print());
+    $("share").addEventListener("click", sharePdf);
+    $("openEditor").addEventListener("click", () => window.Handschrift.open());
+    $("hwDialog").addEventListener("close", () => {
+      if (window.Handschrift.count() && els.font.value !== CUSTOM) {
+        els.font.value = CUSTOM;
+        updateOutputs();
+      }
+      scheduleRender();
+    });
 
     render();
     // Falls Webfonts erst später fertig sind, nochmal zeichnen
