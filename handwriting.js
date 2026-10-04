@@ -4,6 +4,7 @@
   "use strict";
 
   const STORE_KEY = "text-umwandler:glyphs:v1";
+  const PROFILES_KEY = "text-umwandler:profiles";
 
   // Zeichenfeld in em-Einheiten, Ursprung auf der Grundlinie
   const PAD_TOP = -1.1;
@@ -31,6 +32,10 @@
   const PAD_INK = "#1d3a8a";
 
   let glyphs = {};
+  // Mehrere Handschriften: das erste Profil nutzt den bisherigen Speicherplatz
+  let profiles = { active: "default", list: [{ id: "default", name: "Meine Handschrift" }] };
+  const profileListeners = [];
+  const keyFor = (id) => (id === "default" ? STORE_KEY : `${STORE_KEY}:${id}`);
   let target = 3;           // gewünschte Varianten pro Zeichen
   const listeners = [];
 
@@ -43,11 +48,28 @@
     );
   }
 
-  function load() {
+  function loadProfiles() {
     try {
-      const data = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+      const p = JSON.parse(localStorage.getItem(PROFILES_KEY) || "null");
+      if (p && Array.isArray(p.list) && p.list.length && p.list.some((x) => x.id === p.active)) profiles = p;
+    } catch (_) { /* Standard behalten */ }
+  }
+
+  function saveProfiles() {
+    try { localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles)); } catch (_) { /* egal */ }
+  }
+
+  function loadGlyphs() {
+    glyphs = {};
+    try {
+      const data = JSON.parse(localStorage.getItem(keyFor(profiles.active)) || "null");
       if (data && isValidGlyphs(data.glyphs)) glyphs = data.glyphs;
     } catch (_) { glyphs = {}; }
+  }
+
+  function load() {
+    loadProfiles();
+    loadGlyphs();
     try {
       const t = Number(localStorage.getItem(TARGET_KEY));
       if (t >= 1 && t <= 5) target = t;
@@ -56,7 +78,7 @@
 
   function persist() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, glyphs }));
+      localStorage.setItem(keyFor(profiles.active), JSON.stringify({ version: 1, glyphs }));
       return true;
     } catch (_) {
       return false;
@@ -512,6 +534,64 @@
     return ok;
   }
 
+  // ---------- Profile ----------
+
+  function activeProfile() {
+    return profiles.list.find((p) => p.id === profiles.active) || profiles.list[0];
+  }
+
+  function profilesChanged() {
+    saveProfiles();
+    if (overlay) {
+      drafts = [];
+      buildTiles();
+      select(ALL_CHARS[0]);
+      updateProgress();
+    }
+    listeners.forEach((fn) => fn());
+    profileListeners.forEach((fn) => fn());
+  }
+
+  function switchProfile(id) {
+    if (!profiles.list.some((p) => p.id === id) || id === profiles.active) return;
+    commitDraft();
+    profiles.active = id;
+    loadGlyphs();
+    profilesChanged();
+  }
+
+  function createProfile(name) {
+    commitDraft();
+    const id = "p" + Date.now().toString(36);
+    profiles.list.push({ id, name: name || `Handschrift ${profiles.list.length + 1}` });
+    profiles.active = id;
+    glyphs = {};
+    profilesChanged();
+  }
+
+  function renameProfile(name) {
+    if (!name) return;
+    activeProfile().name = name;
+    profilesChanged();
+  }
+
+  function deleteProfile() {
+    if (profiles.list.length < 2) return false;
+    const id = profiles.active;
+    try { localStorage.removeItem(keyFor(id)); } catch (_) { /* egal */ }
+    profiles.list = profiles.list.filter((p) => p.id !== id);
+    profiles.active = profiles.list[0].id;
+    loadGlyphs();
+    profilesChanged();
+    return true;
+  }
+
+  function fillProfileSelect(sel) {
+    sel.innerHTML = "";
+    for (const p of profiles.list) sel.add(new Option(p.name, p.id));
+    sel.value = profiles.active;
+  }
+
   function open() {
     overlay.hidden = false;
     document.body.classList.add("modal-open");
@@ -540,6 +620,30 @@
     pad.addEventListener("pointercancel", onPointerUp);
     pad.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
     window.addEventListener("resize", () => { if (isOpen()) resizePad(); });
+
+    const profileSel = $("hwProfile");
+    const refreshProfileUi = () => {
+      fillProfileSelect(profileSel);
+      $("hwTitle").textContent = activeProfile().name;
+      $("hwProfileDelete").disabled = profiles.list.length < 2;
+    };
+    profileListeners.push(refreshProfileUi);
+    refreshProfileUi();
+    profileSel.addEventListener("change", () => switchProfile(profileSel.value));
+    $("hwProfileNew").addEventListener("click", () => {
+      const name = prompt("Name der neuen Handschrift (z. B. „Mama“ oder „Schönschrift“):", "");
+      if (name === null) return;
+      createProfile(name.trim());
+      setStatus("Neue, leere Handschrift angelegt – jetzt Buchstaben zeichnen oder eine Vorlage einlesen.");
+    });
+    $("hwProfileRename").addEventListener("click", () => {
+      const name = prompt("Neuer Name:", activeProfile().name);
+      if (name && name.trim()) renameProfile(name.trim());
+    });
+    $("hwProfileDelete").addEventListener("click", () => {
+      if (!confirm(`Die Handschrift „${activeProfile().name}“ mit allen Buchstaben wirklich löschen?`)) return;
+      deleteProfile();
+    });
 
     $("hwUndo").addEventListener("click", () => { drafts.pop(); redrawPad(); });
     $("hwClear").addEventListener("click", () => { drafts = []; redrawPad(); });
@@ -605,6 +709,11 @@
     variants: (ch) => glyphs[ch] || [],
     avgWidth,
     count: () => Object.keys(glyphs).length,
+    profiles: () => profiles.list.map((p) => ({ ...p })),
+    activeProfile: () => ({ ...activeProfile() }),
+    switchProfile,
+    fillProfileSelect,
+    onProfiles: (fn) => profileListeners.push(fn),
     drawGlyph,
     onChange: (fn) => listeners.push(fn),
   };

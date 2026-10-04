@@ -1,0 +1,11 @@
+// Konfiguration für das automatische Bereitstellen über „Workers Builds“ (Cloudflare ↔ GitHub).
+// Der Name muss mit dem Worker im Cloudflare-Dashboard übereinstimmen.
+{
+  "name": "umwandeln",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  // Workers AI – im Code als env.AI erreichbar
+  "ai": { "binding": "AI" },
+  "observability": { "enabled": true }
+}
