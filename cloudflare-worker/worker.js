@@ -1,4 +1,4 @@
-// Text-Umwandler – KI-Worker für Cloudflare Workers AI
+// Text-Umwandler – KI-Worker für Cloudflare Workers AI (Version 4)
 //
 // Einrichtung im Cloudflare-Dashboard:
 //   1. Worker anlegen, unter „Bindings“ ein Binding vom Typ „Workers AI“ mit dem Namen  AI  hinzufügen
@@ -10,6 +10,10 @@
 // Es wird kein API-Schlüssel gebraucht. Nur die eigene GitHub-Pages-Seite darf den Worker benutzen.
 
 const ALLOWED_ORIGINS = ["https://mburmeisterl.github.io"];
+
+// Wird von der Webseite beim Verbindungstest angezeigt – so sieht man, ob der neueste Code läuft
+const WORKER_VERSION = 4;
+const FUNCTIONS = ["test", "write", "correct", "translate", "ocr", "label"];
 
 // Werden der Reihe nach probiert; das erste funktionierende Modell wird gemerkt
 const TEXT_MODELS = [
@@ -154,7 +158,9 @@ export default {
       new Response(JSON.stringify(obj), { status, headers: { ...headers, "content-type": "application/json; charset=utf-8" } });
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
-    if (request.method === "GET") return json({ ok: true, info: "Text-Umwandler KI-Worker läuft." });
+    if (request.method === "GET") {
+      return json({ ok: true, info: "Text-Umwandler KI-Worker läuft.", version: WORKER_VERSION, functions: FUNCTIONS });
+    }
     if (request.method !== "POST") return json({ error: "Nur POST erlaubt." }, 405);
     if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: "Diese Seite darf den Worker nicht benutzen." }, 403);
     if (!env.AI) return json({ error: "Im Worker fehlt das Workers-AI-Binding mit dem Namen „AI“." }, 500);
@@ -171,7 +177,7 @@ export default {
     try {
       if (path === "/test") {
         const r = await runText(env, [{ role: "user", content: "Antworte nur mit dem Wort OK." }], 10);
-        return json({ model: r.model, reply: r.text.trim() });
+        return json({ model: r.model, reply: r.text.trim(), version: WORKER_VERSION, functions: FUNCTIONS });
       }
 
       if (path === "/write") {
