@@ -134,7 +134,27 @@
     return im;
   }
 
+  // Erzeugte Zeichen (synth.js) bringen ihre Alpha-Maske direkt als Canvas mit
+  const canvasTints = new WeakMap();
+  function tintedCanvas(src, color) {
+    let m = canvasTints.get(src);
+    if (!m) canvasTints.set(src, (m = new Map()));
+    let c = m.get(color);
+    if (c) return c;
+    c = document.createElement("canvas");
+    c.width = src.width;
+    c.height = src.height;
+    const x = c.getContext("2d");
+    x.drawImage(src, 0, 0);
+    x.globalCompositeOperation = "source-in";
+    x.fillStyle = color;
+    x.fillRect(0, 0, c.width, c.height);
+    m.set(color, c);
+    return c;
+  }
+
   function tinted(v, color) {
+    if (v.canvas) return tintedCanvas(v.canvas, color);
     const key = color + "|" + v.img;
     let c = tintCache.get(key);
     if (c) return c;
@@ -168,7 +188,7 @@
 
   // Zeichnet eine Variante; (ox, oy) ist der Ursprung des Zeichenfelds auf der Grundlinie
   function drawVariantAt(ctx, v, em, penWidth, ox, oy) {
-    if (v.img) {
+    if (v.img || v.canvas) {
       const t = tinted(v, ctx.fillStyle);
       if (t) ctx.drawImage(t, ox + v.bx * em, oy + v.by * em, v.bw * em, v.bh * em);
       return;
@@ -579,6 +599,9 @@
     open,
     onClose: (fn) => closeListeners.push(fn),
     has: (ch) => !!glyphs[ch],
+    allGlyphs: () => glyphs,
+    imageFor,
+    strokeWidth,
     variants: (ch) => glyphs[ch] || [],
     avgWidth,
     count: () => Object.keys(glyphs).length,

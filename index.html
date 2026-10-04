@@ -6,7 +6,7 @@
   <title>Text-Umwandler – Text in Handschrift</title>
   <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -134,6 +134,29 @@
         <details class="more">
           <summary>Feinabstimmung</summary>
           <div class="more-body">
+            <div class="synth-box" id="synthField">
+              <label class="check">
+                <input type="checkbox" id="synth" checked>
+                <span>Fehlende Zeichen im Stil meiner Handschrift ergänzen</span>
+              </label>
+              <label class="field">
+                <span>Grundlage für fehlende Zeichen</span>
+                <select id="synthBase">
+                  <option value="">Automatisch (ähnlichste Schrift)</option>
+                  <option value="Caveat">Caveat</option>
+                  <option value="Kalam">Kalam</option>
+                  <option value="Indie Flower">Indie Flower</option>
+                  <option value="Shadows Into Light">Shadows Into Light</option>
+                  <option value="Gloria Hallelujah">Gloria Hallelujah</option>
+                  <option value="Reenie Beanie">Reenie Beanie</option>
+                  <option value="Nothing You Could Do">Nothing You Could Do</option>
+                  <option value="Dancing Script">Dancing Script</option>
+                  <option value="Homemade Apple">Homemade Apple</option>
+                </select>
+              </label>
+              <p class="hint" id="synthInfo"></p>
+            </div>
+
             <label class="field range" id="penField">
               <span>Stiftstärke <output id="penOut"></output></span>
               <input type="range" id="pen" min="2" max="10" step="0.5" value="5">
@@ -387,11 +410,12 @@
 
   <script src="vendor/jspdf.umd.min.js" defer></script>
   <script src="vendor/anthropic/anthropic-sdk.min.js" defer></script>
-  <script src="handwriting.js?v=5" defer></script>
+  <script src="handwriting.js?v=12" defer></script>
   <script src="template.js?v=7" defer></script>
   <script src="ai.js?v=12" defer></script>
   <script src="scan.js?v=11" defer></script>
-  <script src="app.js?v=11" defer></script>
+  <script src="synth.js?v=13" defer></script>
+  <script src="app.js?v=12" defer></script>
   <script src="translate.js?v=11" defer></script>
   <script src="router.js?v=11" defer></script>
 </body>
