@@ -544,20 +544,67 @@
       status.textContent = "Rückgängig gemacht.";
     });
 
-    keyInput.value = KI.getKey() ? "••••••••••••" : "";
+    const MASK = "••••••••••••";
+    const providerSel = $("aiProvider");
+    const modelSel = $("aiModel");
+    const HINTS = {
+      gemini:
+        'Einen kostenlosen Schlüssel bekommst du mit einem Google-Konto auf ' +
+        '<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. ' +
+        "Der kostenlose Zugang hat Grenzen pro Minute und Tag; Google darf dabei Eingaben zur Verbesserung seiner Dienste verwenden. ",
+      claude:
+        'Einen Schlüssel bekommst du auf <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. ' +
+        "Die Nutzung wird pro Anfrage abgerechnet (meist ein paar Cent). ",
+    };
+    const COMMON = "Der Schlüssel wird nur in diesem Browser gespeichert und direkt an den Anbieter geschickt – benutze die KI-Funktionen nur auf deinen eigenen Geräten.";
+
+    async function loadModels() {
+      if (KI.getProvider() !== "gemini" || !KI.getKey("gemini")) return;
+      try {
+        const models = await KI.listGeminiModels();
+        const chosen = KI.getGeminiModel();
+        const auto = KI.pickGeminiModel(models);
+        modelSel.innerHTML = "";
+        modelSel.add(new Option(`Automatisch (${auto})`, ""));
+        for (const m of models) modelSel.add(new Option(`${m.label} (${m.id})`, m.id));
+        modelSel.value = models.some((m) => m.id === chosen) ? chosen : "";
+      } catch (e) {
+        status.textContent = KI.friendlyError(e);
+      }
+    }
+
+    function showProvider() {
+      const p = KI.getProvider();
+      providerSel.value = p;
+      $("aiKeyLabel").textContent = p === "gemini" ? "Gemini-API-Schlüssel" : "Claude-API-Schlüssel (Anthropic)";
+      keyInput.placeholder = p === "gemini" ? "AIza…" : "sk-ant-…";
+      keyInput.value = KI.getKey(p) ? MASK : "";
+      $("aiModelField").hidden = p !== "gemini";
+      $("aiKeyHint").innerHTML = HINTS[p] + COMMON;
+      loadModels();
+    }
+
+    providerSel.addEventListener("change", () => {
+      KI.setProvider(providerSel.value);
+      status.textContent = "";
+      showProvider();
+    });
+    modelSel.addEventListener("change", () => KI.setGeminiModel(modelSel.value));
     $("aiKeySave").addEventListener("click", () => {
       const key = keyInput.value.trim();
-      if (!key || /^•+$/.test(key)) { status.textContent = "Bitte einen Schlüssel einfügen."; return; }
-      KI.setKey(key);
-      keyInput.value = "••••••••••••";
+      if (!key || key === MASK) { status.textContent = "Bitte einen Schlüssel einfügen."; return; }
+      KI.setKey(KI.getProvider(), key);
+      keyInput.value = MASK;
       status.textContent = "Schlüssel gespeichert.";
+      loadModels();
     });
     $("aiKeyDelete").addEventListener("click", () => {
-      KI.setKey("");
+      KI.setKey(KI.getProvider(), "");
       keyInput.value = "";
       status.textContent = "Schlüssel gelöscht.";
     });
-    keyInput.addEventListener("focus", () => { if (/^•+$/.test(keyInput.value)) keyInput.value = ""; });
+    showProvider();
+    keyInput.addEventListener("focus", () => { if (keyInput.value === MASK) keyInput.value = ""; });
   }
 
   // ---------- Events ----------

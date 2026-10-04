@@ -36,7 +36,7 @@ Es gibt drei Wege, die eigene Handschrift einzulesen:
 Eine ganz normal beschriebene Seite (Bild, PDF oder Foto) hochladen: Die Webseite zerlegt die Tinte in
 einzelne Stücke, die KI (Claude) bestimmt, welches Zeichen jedes Stück ist, und in einer Kontrollansicht
 lassen sich Fehler korrigieren. Funktioniert am besten mit Druckschrift; verbundene Schreibschrift lässt
-sich kaum in einzelne Buchstaben zerlegen. Braucht einen API-Schlüssel (siehe unten).
+sich kaum in einzelne Buchstaben zerlegen. Braucht einen API-Schlüssel für Gemini oder Claude (siehe unten).
 
 **C) Direkt auf der Webseite zeichnen**
 
@@ -56,16 +56,26 @@ als Datei sichern und auf ein anderes Gerät übertragen.
 
 Im Bereich **🤖 KI-Helfer** unter dem Textfeld:
 
+Als KI kann **Google Gemini** oder **Anthropic Claude** benutzt werden (Auswahl unter
+**KI-Einstellungen**, jeder Anbieter mit eigenem Schlüssel):
+
+- **Gemini:** kostenloser Schlüssel mit einem Google-Konto auf
+  [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Der kostenlose Zugang hat Grenzen pro
+  Minute und Tag; Google darf dabei Eingaben zur Verbesserung seiner Dienste verwenden. Die Seite wählt
+  automatisch das neueste Flash-Modell, ein anderes Modell lässt sich in den Einstellungen auswählen.
+- **Claude:** Schlüssel auf [console.anthropic.com](https://console.anthropic.com/settings/keys),
+  Abrechnung pro Nutzung (meist wenige Cent pro Anfrage).
+
+Funktionen:
+
 - **✨ Text schreiben** – beschreiben, was gebraucht wird („Dankesbrief an Oma für das Geschenk“),
   der Text erscheint direkt in Handschrift
 - **✏️ Text überarbeiten** – den vorhandenen Text nach Wunsch ändern lassen („kürzer und lustiger“)
 - **✔️ Rechtschreibung prüfen** – korrigiert nur Fehler und listet die Änderungen auf
 - **↶ Rückgängig** – stellt den Text vor der letzten KI-Änderung wieder her
 
-Dafür wird ein API-Schlüssel von [console.anthropic.com](https://console.anthropic.com/settings/keys)
-benötigt (Abrechnung pro Nutzung, meist wenige Cent pro Anfrage). Er wird unter **KI-Einstellungen**
-eingetragen, nur im Browser gespeichert und direkt an die Claude API geschickt – deshalb nur auf
-eigenen Geräten verwenden.
+Der Schlüssel wird nur im Browser gespeichert und direkt an den Anbieter geschickt – deshalb die
+KI-Funktionen nur auf eigenen Geräten verwenden.
 
 ## Benutzung
 

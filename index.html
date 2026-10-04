@@ -42,14 +42,27 @@
           <details class="ai-settings" id="aiSettings">
             <summary>⚙️ KI-Einstellungen</summary>
             <label class="field">
-              <span>API-Schlüssel von Anthropic</span>
-              <input type="password" id="aiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+              <span>KI-Anbieter</span>
+              <select id="aiProvider">
+                <option value="gemini">Google Gemini</option>
+                <option value="claude">Anthropic Claude</option>
+              </select>
+            </label>
+            <label class="field">
+              <span id="aiKeyLabel">API-Schlüssel</span>
+              <input type="password" id="aiKey" autocomplete="off" spellcheck="false">
             </label>
             <div class="ai-actions">
               <button type="button" id="aiKeySave">Speichern</button>
               <button type="button" id="aiKeyDelete">Löschen</button>
             </div>
-            <p class="hint">Einen Schlüssel bekommst du auf <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Die Nutzung wird dort pro Anfrage abgerechnet (meist ein paar Cent). Der Schlüssel wird nur in diesem Browser gespeichert und direkt an Anthropic geschickt – benutze diese Funktion nur auf deinen eigenen Geräten.</p>
+            <label class="field" id="aiModelField">
+              <span>Gemini-Modell</span>
+              <select id="aiModel">
+                <option value="">Automatisch (neuestes Flash-Modell)</option>
+              </select>
+            </label>
+            <p class="hint" id="aiKeyHint"></p>
           </details>
         </div>
       </details>
@@ -169,7 +182,7 @@
 
         <section class="hw-import">
           <strong>🤖 Mit KI: beliebige Seite lesen</strong>
-          <p>Lade eine Seite hoch, die du ganz normal geschrieben hast. Die KI erkennt die einzelnen Buchstaben, danach kannst du alles prüfen. Klappt am besten mit Druckschrift (Buchstaben nicht verbunden) auf weißem Papier. Braucht einen API-Schlüssel (KI-Helfer → KI-Einstellungen).</p>
+          <p>Lade eine Seite hoch, die du ganz normal geschrieben hast. Die KI erkennt die einzelnen Buchstaben, danach kannst du alles prüfen. Klappt am besten mit Druckschrift (Buchstaben nicht verbunden) auf weißem Papier. Braucht einen API-Schlüssel für Gemini oder Claude (KI-Helfer → KI-Einstellungen).</p>
           <div class="hw-import-actions">
             <label class="file-btn primary">🤖 Handschrift-Seite analysieren<input type="file" id="aiScan" accept="image/*,application/pdf,.pdf"></label>
           </div>
@@ -248,8 +261,8 @@
   <script src="vendor/anthropic/anthropic-sdk.min.js" defer></script>
   <script src="handwriting.js?v=5" defer></script>
   <script src="template.js?v=5" defer></script>
-  <script src="ai.js?v=5" defer></script>
-  <script src="scan.js?v=5" defer></script>
-  <script src="app.js?v=5" defer></script>
+  <script src="ai.js?v=6" defer></script>
+  <script src="scan.js?v=6" defer></script>
+  <script src="app.js?v=6" defer></script>
 </body>
 </html>
