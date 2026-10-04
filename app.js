@@ -534,8 +534,8 @@
 
     async function run(label, fn) {
       if (!KI.hasKey()) {
-        status.textContent = "Bitte zuerst einen API-Schlüssel eintragen.";
-        $("aiSettings").open = true;
+        status.textContent = "Bitte zuerst oben rechts unter „⚙️ KI-Einstellungen“ die KI einrichten.";
+        window.openSettings && window.openSettings();
         keyInput.focus();
         return;
       }
@@ -594,8 +594,8 @@
     ocrInput.addEventListener("click", (e) => {
       if (!KI.hasKey()) {
         e.preventDefault();
-        status.textContent = "Bitte zuerst unter „KI-Einstellungen“ einen Schlüssel bzw. die Worker-Adresse eintragen.";
-        $("aiSettings").open = true;
+        status.textContent = "Bitte zuerst oben rechts unter „⚙️ KI-Einstellungen“ einen Schlüssel bzw. die Worker-Adresse eintragen.";
+        window.openSettings && window.openSettings();
       }
     });
     ocrInput.addEventListener("change", async () => {
@@ -639,6 +639,8 @@
       status.textContent = "Rückgängig gemacht.";
     });
 
+    // Meldungen der KI-Einstellungen erscheinen im Einstellungs-Fenster
+    const setMsg = $("aiSetStatus");
     const MASK = "••••••••••••";
     const providerSel = $("aiProvider");
     const modelSel = $("aiModel");
@@ -669,7 +671,7 @@
         for (const m of models) modelSel.add(new Option(`${m.label} (${m.id})`, m.id));
         modelSel.value = models.some((m) => m.id === chosen) ? chosen : "";
       } catch (e) {
-        status.textContent = KI.friendlyError(e);
+        setMsg.textContent = KI.friendlyError(e);
       }
     }
 
@@ -689,26 +691,26 @@
 
     providerSel.addEventListener("change", () => {
       KI.setProvider(providerSel.value);
-      status.textContent = "";
+      setMsg.textContent = "";
       showProvider();
     });
     modelSel.addEventListener("change", () => KI.setGeminiModel(modelSel.value));
     function saveKey(quiet) {
       let key = keyInput.value.trim().replace(/\s+/g, "");
       if (!key || key === MASK) {
-        if (!quiet) status.textContent = "Bitte einen Schlüssel einfügen.";
+        if (!quiet) setMsg.textContent = "Bitte einen Schlüssel einfügen.";
         return false;
       }
       if (KI.getProvider() === "cloudflare") {
         if (!/^https?:\/\//i.test(key)) key = "https://" + key;
         KI.setKey("cloudflare", key);
         keyInput.value = key;
-        status.textContent = "Adresse gespeichert. Tippe auf „Verbindung testen“, um den Worker zu prüfen.";
+        setMsg.textContent = "Adresse gespeichert. Tippe auf „Verbindung testen“, um den Worker zu prüfen.";
         return true;
       }
       KI.setKey(KI.getProvider(), key);
       keyInput.value = MASK;
-      status.textContent = "Schlüssel gespeichert. Tippe auf „Verbindung testen“, um ihn zu prüfen.";
+      setMsg.textContent = "Schlüssel gespeichert. Tippe auf „Verbindung testen“, um ihn zu prüfen.";
       loadModels();
       return true;
     }
@@ -718,16 +720,16 @@
 
     $("aiTest").addEventListener("click", async () => {
       if (keyInput.value.trim() && keyInput.value !== MASK && keyInput.value.trim() !== KI.getKey()) saveKey(true);
-      if (!KI.hasKey()) { status.textContent = "Bitte zuerst einen Schlüssel einfügen."; return; }
+      if (!KI.hasKey()) { setMsg.textContent = "Bitte zuerst einen Schlüssel einfügen."; return; }
       const btn = $("aiTest");
       btn.disabled = true;
-      status.textContent = "Teste Verbindung …";
+      setMsg.textContent = "Teste Verbindung …";
       try {
         const { model, reply } = await KI.test();
-        status.textContent = `✅ Verbindung klappt (Modell: ${model}, Antwort: „${reply.slice(0, 40)}“).`;
+        setMsg.textContent = `✅ Verbindung klappt (Modell: ${model}, Antwort: „${reply.slice(0, 40)}“).`;
         if (KI.getProvider() === "gemini") loadModels();
       } catch (e) {
-        status.textContent = "❌ " + KI.friendlyError(e);
+        setMsg.textContent = "❌ " + KI.friendlyError(e);
       } finally {
         btn.disabled = false;
       }
@@ -735,7 +737,7 @@
     $("aiKeyDelete").addEventListener("click", () => {
       KI.setKey(KI.getProvider(), "");
       keyInput.value = "";
-      status.textContent = "Schlüssel gelöscht.";
+      setMsg.textContent = "Schlüssel gelöscht.";
     });
     showProvider();
     keyInput.addEventListener("focus", () => { if (keyInput.value === MASK) keyInput.value = ""; });
@@ -795,4 +797,13 @@
   }
 
   init();
+
+  // Für andere Bereiche, z. B. den Übersetzer: Text in den Handschrift-Umwandler übernehmen
+  window.TextUmwandler = {
+    setText(t) {
+      els.text.value = t;
+      updateOutputs();
+      scheduleRender();
+    },
+  };
 })();
