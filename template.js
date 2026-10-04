@@ -465,7 +465,7 @@
   }
 
   window.HandschriftVorlage = {
-    init, buildTemplate, analyzeCanvas, importFiles,
+    init, buildTemplate, analyzeCanvas, importFiles, fileToCanvases,
     layout: { pageBoxes, pageCount, BOX_W, BOX_H },
   };
 })();

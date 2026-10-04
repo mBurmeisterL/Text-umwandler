@@ -6,7 +6,7 @@
   <title>Text-Umwandler – Text in Handschrift</title>
   <meta name="description" content="Getippten Text in realistisch wirkende Handschrift umwandeln und als PNG oder PDF herunterladen.">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -27,6 +27,32 @@
         <span>Dein Text</span>
         <textarea id="text" rows="10" spellcheck="true"></textarea>
       </label>
+
+      <details class="ai-box" id="aiBox">
+        <summary>🤖 KI-Helfer</summary>
+        <div class="ai-body">
+          <textarea id="aiPrompt" rows="3" placeholder="z. B. Schreib einen Dankesbrief an Oma für das Geburtstagsgeschenk"></textarea>
+          <div class="ai-actions">
+            <button type="button" id="aiWrite" class="primary">✨ Text schreiben</button>
+            <button type="button" id="aiRewrite">✏️ Text überarbeiten</button>
+            <button type="button" id="aiCorrect">✔️ Rechtschreibung prüfen</button>
+            <button type="button" id="aiUndo" hidden>↶ Rückgängig</button>
+          </div>
+          <p class="hint" id="aiStatus" role="status"></p>
+          <details class="ai-settings" id="aiSettings">
+            <summary>⚙️ KI-Einstellungen</summary>
+            <label class="field">
+              <span>API-Schlüssel von Anthropic</span>
+              <input type="password" id="aiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+            </label>
+            <div class="ai-actions">
+              <button type="button" id="aiKeySave">Speichern</button>
+              <button type="button" id="aiKeyDelete">Löschen</button>
+            </div>
+            <p class="hint">Einen Schlüssel bekommst du auf <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Die Nutzung wird dort pro Anfrage abgerechnet (meist ein paar Cent). Der Schlüssel wird nur in diesem Browser gespeichert und direkt an Anthropic geschickt – benutze diese Funktion nur auf deinen eigenen Geräten.</p>
+          </details>
+        </div>
+      </details>
 
       <div class="grid">
         <label class="field">
@@ -141,6 +167,14 @@
           </div>
         </section>
 
+        <section class="hw-import">
+          <strong>🤖 Mit KI: beliebige Seite lesen</strong>
+          <p>Lade eine Seite hoch, die du ganz normal geschrieben hast. Die KI erkennt die einzelnen Buchstaben, danach kannst du alles prüfen. Klappt am besten mit Druckschrift (Buchstaben nicht verbunden) auf weißem Papier. Braucht einen API-Schlüssel (KI-Helfer → KI-Einstellungen).</p>
+          <div class="hw-import-actions">
+            <label class="file-btn primary">🤖 Handschrift-Seite analysieren<input type="file" id="aiScan" accept="image/*,application/pdf,.pdf"></label>
+          </div>
+        </section>
+
         <div class="hw-current">
           <span>Schreibe: <strong id="hwChar">a</strong></span>
           <label class="hw-target">Jedes Zeichen
@@ -189,9 +223,33 @@
   </div>
   </div>
 
+  <div id="aiReview" class="hw-overlay" hidden>
+    <div class="hw ai-review" role="dialog" aria-modal="true" aria-labelledby="aiReviewTitle">
+      <header class="hw-head">
+        <h2 id="aiReviewTitle">Erkannte Buchstaben prüfen</h2>
+        <span class="hw-progress" id="aiReviewInfo"></span>
+      </header>
+      <div class="ai-review-body">
+        <p class="muted">Stimmt ein Zeichen nicht, tippe das richtige ins Feld oder entferne das Häkchen. Nur angehakte Zeichen werden übernommen.</p>
+        <div id="aiReviewGrid" class="ai-grid"></div>
+        <details id="aiReviewRestBox" class="ai-rest">
+          <summary>Nicht erkannte Stücke (<span id="aiReviewRestCount">0</span>) – hier kannst du selbst ein Zeichen eintragen</summary>
+          <div id="aiReviewRest" class="ai-grid"></div>
+        </details>
+      </div>
+      <footer class="hw-foot">
+        <button type="button" id="aiReviewCancel">Abbrechen</button>
+        <button type="button" id="aiReviewOk" class="primary">Angehakte übernehmen</button>
+      </footer>
+    </div>
+  </div>
+
   <script src="vendor/jspdf.umd.min.js" defer></script>
-  <script src="handwriting.js?v=4" defer></script>
-  <script src="template.js?v=4" defer></script>
-  <script src="app.js?v=4" defer></script>
+  <script src="vendor/anthropic/anthropic-sdk.min.js" defer></script>
+  <script src="handwriting.js?v=5" defer></script>
+  <script src="template.js?v=5" defer></script>
+  <script src="ai.js?v=5" defer></script>
+  <script src="scan.js?v=5" defer></script>
+  <script src="app.js?v=5" defer></script>
 </body>
 </html>
