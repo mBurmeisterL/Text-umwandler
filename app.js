@@ -563,7 +563,7 @@
       try {
         const models = await KI.listGeminiModels();
         const chosen = KI.getGeminiModel();
-        const auto = KI.pickGeminiModel(models);
+        const auto = KI.getWorkingGeminiModel() || KI.pickGeminiModel(models);
         modelSel.innerHTML = "";
         modelSel.add(new Option(`Automatisch (${auto})`, ""));
         for (const m of models) modelSel.add(new Option(`${m.label} (${m.id})`, m.id));
@@ -590,13 +590,37 @@
       showProvider();
     });
     modelSel.addEventListener("change", () => KI.setGeminiModel(modelSel.value));
-    $("aiKeySave").addEventListener("click", () => {
-      const key = keyInput.value.trim();
-      if (!key || key === MASK) { status.textContent = "Bitte einen Schlüssel einfügen."; return; }
+    function saveKey(quiet) {
+      const key = keyInput.value.trim().replace(/\s+/g, "");
+      if (!key || key === MASK) {
+        if (!quiet) status.textContent = "Bitte einen Schlüssel einfügen.";
+        return false;
+      }
       KI.setKey(KI.getProvider(), key);
       keyInput.value = MASK;
-      status.textContent = "Schlüssel gespeichert.";
+      status.textContent = "Schlüssel gespeichert. Tippe auf „Verbindung testen“, um ihn zu prüfen.";
       loadModels();
+      return true;
+    }
+    $("aiKeySave").addEventListener("click", () => saveKey(false));
+    // Eingefügter Schlüssel wird auch ohne „Speichern“ übernommen
+    keyInput.addEventListener("change", () => saveKey(true));
+
+    $("aiTest").addEventListener("click", async () => {
+      if (keyInput.value.trim() && keyInput.value !== MASK) saveKey(true);
+      if (!KI.hasKey()) { status.textContent = "Bitte zuerst einen Schlüssel einfügen."; return; }
+      const btn = $("aiTest");
+      btn.disabled = true;
+      status.textContent = "Teste Verbindung …";
+      try {
+        const { model, reply } = await KI.test();
+        status.textContent = `✅ Verbindung klappt (Modell: ${model}, Antwort: „${reply.slice(0, 40)}“).`;
+        if (KI.getProvider() === "gemini") loadModels();
+      } catch (e) {
+        status.textContent = "❌ " + KI.friendlyError(e);
+      } finally {
+        btn.disabled = false;
+      }
     });
     $("aiKeyDelete").addEventListener("click", () => {
       KI.setKey(KI.getProvider(), "");
