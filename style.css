@@ -203,7 +203,21 @@ body.modal-open { overflow: hidden; }
 }
 
 .hw-draw { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.hw-current { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hw-current { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.hw-target { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.hw-target select { width: auto; padding: 6px 8px; }
+#hwVarCount.ok { color: #2e7d32; }
+
+.hw-import {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--bg);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hw-import p { margin: 0; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
+.hw-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.hw .file-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 500; }
 .hw-current strong { font-size: 1.6rem; margin-left: 4px; }
 .muted { color: var(--muted); font-size: 0.85rem; }
 
@@ -257,6 +271,7 @@ body.modal-open { overflow: hidden; }
   background: var(--bg);
 }
 .hw .hw-tile.done { background: #fffefa; border-color: color-mix(in srgb, #2e7d32 45%, var(--border)); }
+.hw .hw-tile.partial { border-color: #e0a030; }
 .hw .hw-tile.current { outline: 2px solid var(--accent); outline-offset: 1px; }
 .hw-tile canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hw-tile.done .lbl {
