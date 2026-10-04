@@ -157,6 +157,7 @@
       ? (H.avgWidth(ch) + H.GAP) * s.size
       : measureCtx.measureText(ch).width;
     const penWidth = s.size * 0.01 * s.pen;
+    const lastVariant = {};
     return {
       space: 0.32 * s.size + s.word,
       width: (word) => [...word].reduce((a, ch) => a + advance(ch) + s.spacing, 0),
@@ -167,7 +168,12 @@
       draw(ctx, ch, rnd) {
         if (!H.has(ch)) { ctx.fillText(ch, 0, 0); return; }
         const vs = H.variants(ch);
-        const v = vs[Math.floor(rnd() * vs.length) % vs.length];
+        // Zufällige Variante, aber nie zweimal dieselbe direkt hintereinander
+        const n = vs.length;
+        let idx = Math.floor(rnd() * n) % n;
+        if (n > 1 && idx === lastVariant[ch]) idx = (idx + 1 + Math.floor(rnd() * (n - 1))) % n;
+        lastVariant[ch] = idx;
+        const v = vs[idx];
         H.drawGlyph(ctx, v, s.size, penWidth, ((H.avgWidth(ch) - v.w) / 2) * s.size);
       },
     };
@@ -343,6 +349,7 @@
     try {
       await document.fonts.load(fontString(fontName, s.size), "AaÄäÖöÜüß");
     } catch (_) { /* Fallback-Schrift wird verwendet */ }
+    if (window.Handschrift) await window.Handschrift.ready();
     if (token !== renderToken) return;
 
     const measure = document.createElement("canvas").getContext("2d");
@@ -460,6 +467,7 @@
 
     window.Handschrift.init();
     window.Handschrift.onChange(scheduleRender);
+    window.HandschriftVorlage.init();
 
     for (const el of [els.text, els.font, els.paper, els.size, els.line, els.mess, els.spacing, els.word, els.pen, els.margin]) {
       el.addEventListener("input", () => { updateOutputs(); scheduleRender(); });

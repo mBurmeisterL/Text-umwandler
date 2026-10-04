@@ -26,10 +26,12 @@
   const ALL_CHARS = GROUPS.flatMap(([, chars]) => [...chars]);
 
   const GAP = 0.1;          // Abstand nach jedem Zeichen (em)
-  const MAX_VARIANTS = 6;
+  const MAX_VARIANTS = 8;
+  const TARGET_KEY = "text-umwandler:hwtarget";
   const PAD_INK = "#1d3a8a";
 
   let glyphs = {};
+  let target = 3;           // gewünschte Varianten pro Zeichen
   const listeners = [];
 
   // ---------- Speicher ----------
@@ -37,7 +39,7 @@
   function isValidGlyphs(obj) {
     if (!obj || typeof obj !== "object") return false;
     return Object.values(obj).every((vs) =>
-      Array.isArray(vs) && vs.every((v) => v && Array.isArray(v.s) && typeof v.w === "number" && typeof v.l === "number")
+      Array.isArray(vs) && vs.every((v) => v && (Array.isArray(v.s) || typeof v.img === "string") && typeof v.w === "number" && typeof v.l === "number")
     );
   }
 
@@ -46,6 +48,10 @@
       const data = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
       if (data && isValidGlyphs(data.glyphs)) glyphs = data.glyphs;
     } catch (_) { glyphs = {}; }
+    try {
+      const t = Number(localStorage.getItem(TARGET_KEY));
+      if (t >= 1 && t <= 5) target = t;
+    } catch (_) { /* egal */ }
   }
 
   function persist() {
@@ -114,10 +120,66 @@
     }
   }
 
+  // Aus einer Vorlage eingelesene Zeichen sind Bilder (Alpha-Maske), die in Tintenfarbe eingefärbt werden
+  const imageCache = new Map();
+  const tintCache = new Map();
+
+  function imageFor(v) {
+    let im = imageCache.get(v.img);
+    if (!im) {
+      im = new Image();
+      im.src = v.img;
+      imageCache.set(v.img, im);
+    }
+    return im;
+  }
+
+  function tinted(v, color) {
+    const key = color + "|" + v.img;
+    let c = tintCache.get(key);
+    if (c) return c;
+    const im = imageFor(v);
+    if (!im.complete || !im.naturalWidth) return null;
+    c = document.createElement("canvas");
+    c.width = im.naturalWidth;
+    c.height = im.naturalHeight;
+    const x = c.getContext("2d");
+    x.drawImage(im, 0, 0);
+    x.globalCompositeOperation = "source-in";
+    x.fillStyle = color;
+    x.fillRect(0, 0, c.width, c.height);
+    if (tintCache.size > 3000) tintCache.clear();
+    tintCache.set(key, c);
+    return c;
+  }
+
+  // Wartet, bis alle Bild-Zeichen geladen sind
+  function ready() {
+    const waits = [];
+    for (const vs of Object.values(glyphs)) {
+      for (const v of vs) {
+        if (!v.img) continue;
+        const im = imageFor(v);
+        if (!im.complete) waits.push(new Promise((res) => { im.onload = im.onerror = res; }));
+      }
+    }
+    return Promise.all(waits);
+  }
+
+  // Zeichnet eine Variante; (ox, oy) ist der Ursprung des Zeichenfelds auf der Grundlinie
+  function drawVariantAt(ctx, v, em, penWidth, ox, oy) {
+    if (v.img) {
+      const t = tinted(v, ctx.fillStyle);
+      if (t) ctx.drawImage(t, ox + v.bx * em, oy + v.by * em, v.bw * em, v.bh * em);
+      return;
+    }
+    ctx.strokeStyle = ctx.fillStyle;
+    drawStrokes(ctx, v.s, em, penWidth, ox, oy);
+  }
+
   // Zeichnet eine Variante mit linker Kante bei x = offsetX, Grundlinie bei y = 0
   function drawGlyph(ctx, variant, em, penWidth, offsetX = 0) {
-    ctx.strokeStyle = ctx.fillStyle;
-    drawStrokes(ctx, variant.s, em, penWidth, offsetX - variant.l * em, 0);
+    drawVariantAt(ctx, variant, em, penWidth, offsetX - variant.l * em, 0);
   }
 
   function renderPreview(canvas, variant) {
@@ -127,8 +189,12 @@
     const em = h / PAD_HEIGHT;
     const scale = Math.min(1, (w * 0.85) / (variant.w * em));
     const e = em * scale;
-    ctx.fillStyle = ctx.strokeStyle = PAD_INK;
-    drawStrokes(ctx, variant.s, e, e * 0.06, (w - variant.w * e) / 2 - variant.l * e, h / 2 + (-PAD_TOP - PAD_HEIGHT / 2) * e);
+    ctx.fillStyle = PAD_INK;
+    if (variant.img) {
+      const im = imageFor(variant);
+      if (!im.complete) { im.addEventListener("load", () => renderPreview(canvas, variant), { once: true }); return; }
+    }
+    drawVariantAt(ctx, variant, e, e * 0.06, (w - variant.w * e) / 2 - variant.l * e, h / 2 + (-PAD_TOP - PAD_HEIGHT / 2) * e);
   }
 
   // ---------- Editor ----------
@@ -259,6 +325,20 @@
     setStatus("");
   }
 
+  // Weiter: beim selben Zeichen bleiben, bis genug Varianten geschrieben sind
+  function next() {
+    const drew = drafts.length > 0;
+    commitDraft();
+    const n = (glyphs[current] || []).length;
+    if (drew && n < target) {
+      renderVariants();
+      redrawPad();
+      setStatus(`Gut! Jetzt „${current}“ noch einmal schreiben (${n + 1} von ${target}).`);
+      return;
+    }
+    step(1);
+  }
+
   function step(dir) {
     const i = ALL_CHARS.indexOf(current);
     select(ALL_CHARS[(i + dir + ALL_CHARS.length) % ALL_CHARS.length]);
@@ -268,9 +348,8 @@
     const box = $("hwVariants");
     box.innerHTML = "";
     const vs = glyphs[current] || [];
-    $("hwVarCount").textContent = vs.length
-      ? `${vs.length} Variante${vs.length > 1 ? "n" : ""} gespeichert`
-      : "noch nicht gezeichnet";
+    $("hwVarCount").textContent = `${Math.min(vs.length, 99)} von ${target} Varianten`;
+    $("hwVarCount").classList.toggle("ok", vs.length >= target);
     vs.forEach((v, i) => {
       const wrap = document.createElement("div");
       wrap.className = "hw-variant";
@@ -299,6 +378,7 @@
     if (!t) return;
     const vs = glyphs[ch];
     t.classList.toggle("done", !!vs);
+    t.classList.toggle("partial", !!vs && vs.length < target);
     t.querySelectorAll("canvas, .badge").forEach((el) => el.remove());
     if (vs) {
       const c = document.createElement("canvas");
@@ -378,6 +458,23 @@
     return !overlay.hidden;
   }
 
+  // Übernimmt Zeichen aus einer eingelesenen Vorlage; gleiche Kästchen ersetzen frühere Importe
+  function importGlyphs(list) {
+    commitDraft();
+    for (const { ch, glyph } of list) {
+      const vs = (glyphs[ch] || []).filter((v) => !glyph.src || v.src !== glyph.src);
+      vs.push(glyph);
+      while (vs.length > MAX_VARIANTS) vs.shift();
+      glyphs[ch] = vs;
+    }
+    const ok = changed();
+    ALL_CHARS.forEach(updateTile);
+    renderVariants();
+    updateProgress();
+    redrawPad();
+    return ok;
+  }
+
   function open() {
     overlay.hidden = false;
     document.body.classList.add("modal-open");
@@ -410,7 +507,15 @@
     $("hwUndo").addEventListener("click", () => { drafts.pop(); redrawPad(); });
     $("hwClear").addEventListener("click", () => { drafts = []; redrawPad(); });
     $("hwPrev").addEventListener("click", () => step(-1));
-    $("hwNext").addEventListener("click", () => step(1));
+    $("hwNext").addEventListener("click", next);
+    const targetSel = $("hwTarget");
+    targetSel.value = String(target);
+    targetSel.addEventListener("change", () => {
+      target = Number(targetSel.value);
+      try { localStorage.setItem(TARGET_KEY, String(target)); } catch (_) { /* egal */ }
+      ALL_CHARS.forEach(updateTile);
+      renderVariants();
+    });
     $("hwAgain").addEventListener("click", () => {
       if (!drafts.length) { setStatus("Erst etwas zeichnen."); return; }
       commitDraft();
@@ -438,7 +543,7 @@
       if (!isOpen()) return;
       if (e.key === "Escape") { e.preventDefault(); close(); }
       else if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); drafts.pop(); redrawPad(); }
-      else if (e.key === "Enter" && e.target.tagName !== "BUTTON") { e.preventDefault(); step(1); }
+      else if (e.key === "Enter" && e.target.tagName !== "BUTTON" && e.target.tagName !== "SELECT") { e.preventDefault(); next(); }
     });
 
     buildTiles();
@@ -447,7 +552,12 @@
 
   window.Handschrift = {
     GAP,
+    CHARS: ALL_CHARS,
+    PAD: { top: PAD_TOP, height: PAD_HEIGHT, width: PAD_WIDTH, guides: GUIDES },
     init,
+    ready,
+    importGlyphs,
+    setStatus: (msg) => setStatus(msg),
     open,
     onClose: (fn) => closeListeners.push(fn),
     has: (ch) => !!glyphs[ch],
