@@ -105,9 +105,20 @@
     div.style.cssText = `font-family:"${it.font || "Helvetica Neue"}",Helvetica,Arial,sans-serif;font-size:${it.size || 14}px;` +
       `color:${it.color || "#1e1b1b"};font-weight:${it.bold ? 700 : 400};font-style:${it.italic ? "italic" : "normal"};padding:${pad}px;` +
       (it.link ? "text-decoration:underline;" : "");
-    div.textContent = it.text || "";
+    // Zeilen aus PDFs: mehrere Formatierungen in einem Feld, solange der Text nicht geändert wurde
+    if (runsValid(it)) {
+      for (const r of it.runs) {
+        const sp = document.createElement("span");
+        sp.textContent = r.text;
+        sp.style.cssText = `font-family:"${r.font || it.font || "Helvetica Neue"}",Helvetica,Arial,sans-serif;font-size:${r.size || it.size}px;` +
+          `color:${r.color || it.color};font-weight:${r.bold ? 700 : 400};font-style:${r.italic ? "italic" : "normal"}`;
+        div.appendChild(sp);
+      }
+    } else div.textContent = it.text || "";
     fo.appendChild(div);
   }
+
+  const runsValid = (it) => Array.isArray(it.runs) && it.runs.length > 1 && it.runs.map((r) => r.text).join("") === it.text;
 
   const dashArray = (dash, w) => (dash === "dashed" ? `${3 * w} ${4 * w}` : dash === "dotted" ? `0.1 ${2 * w}` : null);
 
@@ -615,7 +626,10 @@
   function exportItem(it) {
     const textRun = (o) => [{ text: o.text, size: o.size || 14, font: o.font, color: o.color, bold: o.bold, italic: o.italic, link: toLink(o.link) }];
     switch (it.type) {
-      case "text": return { type: "text", x: it.x, y: it.y, w: it.w, h: it.h, font: it.font, size: it.size, text: textRun(it) };
+      case "text": return {
+        type: "text", x: it.x, y: it.y, w: it.w, h: it.h, font: it.font, size: it.size,
+        text: runsValid(it) ? it.runs.map((r) => ({ ...r, size: r.size || it.size, link: toLink(it.link) })) : textRun(it),
+      };
       case "shape": return {
         type: "shape", shape: it.shape, vertices: it.vertices, radius: it.radius, x: it.x, y: it.y, w: it.w, h: it.h,
         fill: it.fill || null, outline: it.outline ? { ...it.outline, dash: it.outline.dash === "solid" ? null : it.outline.dash } : null,

@@ -1599,6 +1599,111 @@
     return out;
   }
 
+  // ---------- Getippter Text aus PDFs → Goodnotes-Textfelder ----------
+
+  const GN_INSET_PT = 10 / GN_PER_PT; // Innenabstand der Goodnotes-Textfelder (10 Einheiten) in pt
+  const GN_ASCENT = 0.952;           // Oberlänge von Helvetica Neue: Abstand Feldoberkante → Grundlinie
+
+  function gnFont(name, family) {
+    const n = `${name || ""} ${family || ""}`;
+    if (/courier|mono|consol/i.test(n)) return "Courier New";
+    if (/times|serif(?!.*sans)|georgia|garamond|roman|minion|cambria|book/i.test(n) && !/sans/i.test(n)) return "Times New Roman";
+    return "Helvetica Neue";
+  }
+
+  /**
+   * Text einer PDF-Seite (PDF.js getTextContent) in Zeilen zerlegen.
+   * pageHeightPt: Seitenhöhe; fontOf(fontName) → { name, family } (optional); colorAt(x, y, w, h) → "#rrggbb" (optional).
+   * Ergebnis (pt, Ursprung oben links): [{ x, baseline, size, runs: [{ text, x, width, size, font, bold, italic, color }] }]
+   */
+  function pdfTextLines(textContent, pageHeightPt, fontOf, colorAt) {
+    const pieces = [];
+    for (const it of textContent.items) {
+      if (!it.str || !it.transform) continue;
+      const [a, b, c, d, e, f] = it.transform;
+      if (Math.abs(b) > 0.01 * Math.abs(a) || Math.abs(c) > 0.01 * Math.abs(d)) continue; // gedrehter Text bleibt im Hintergrund
+      const size = Math.hypot(c, d) || Math.abs(d) || it.height;
+      if (!size) continue;
+      const info = (fontOf && fontOf(it.fontName)) || {};
+      const style = (textContent.styles && textContent.styles[it.fontName]) || {};
+      const fname = info.name || "";
+      pieces.push({
+        text: it.str, x: e, baseline: pageHeightPt - f, size, width: it.width,
+        font: gnFont(fname, style.fontFamily),
+        bold: info.bold || /bold|black|heavy|semibold|demi/i.test(fname),
+        italic: info.italic || /italic|oblique/i.test(fname),
+      });
+    }
+    pieces.sort((p, q) => p.baseline - q.baseline || p.x - q.x);
+    // Zeilen: gleiche Grundlinie (± ein Viertel der Schriftgröße)
+    const rows = [];
+    for (const p of pieces) {
+      const row = rows.find((r) => Math.abs(r.baseline - p.baseline) < 0.25 * Math.max(r.size, p.size));
+      if (row) { row.items.push(p); row.size = Math.max(row.size, p.size); } else rows.push({ baseline: p.baseline, size: p.size, items: [p] });
+    }
+    const lines = [];
+    for (const r of rows) {
+      r.items.sort((p, q) => p.x - q.x);
+      let cur = null, space = false;
+      for (const p of r.items) {
+        // Reine Leerzeichen-Stücke zählen nicht als Text (manche PDFs überbrücken damit ganze Tabellenspalten)
+        if (!p.text.trim()) { space = true; continue; }
+        const end = cur ? cur.x + cur.width : 0;
+        const gap = cur ? p.x - end : 0;
+        // Große Lücke (Tabellenspalten, Tabulatoren, mehrere Leerzeichen): neues Feld an eigener Stelle
+        if (!cur || gap > 0.9 * r.size) {
+          if (cur) lines.push(cur);
+          cur = { x: p.x, baseline: r.baseline, size: r.size, width: 0, runs: [] };
+          space = false;
+        }
+        const last = cur.runs[cur.runs.length - 1];
+        let text = p.text;
+        if (last && (space || gap > 0.15 * p.size) && !/\s$/.test(last.text) && !/^\s/.test(text)) text = " " + text;
+        space = false;
+        if (last && last.font === p.font && last.bold === p.bold && last.italic === p.italic && Math.abs(last.size - p.size) < 0.5) {
+          last.text += text;
+          last.width = p.x + p.width - last.x;
+        } else {
+          cur.runs.push({ text, x: p.x, width: p.width, size: p.size, font: p.font, bold: p.bold, italic: p.italic });
+        }
+        cur.width = p.x + p.width - cur.x;
+      }
+      if (cur) lines.push(cur);
+    }
+    for (const l of lines) {
+      l.runs = l.runs.filter((r) => r.text.trim());
+      if (!l.runs.length) continue;
+      l.runs[0].text = l.runs[0].text.replace(/^\s+/, "");
+      if (colorAt) {
+        let prev = "#1e1b1b";
+        for (const r of l.runs) {
+          // Bereich von der Oberlänge bis unter die Grundlinie (Unterstriche, Unterlängen)
+          const c = colorAt(r.x, l.baseline - r.size * 0.8, Math.max(1, r.width), r.size * 1.05);
+          const n = parseInt(c.slice(1), 16);
+          const lum = 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+          r.color = lum > 200 ? prev : c; // nichts Dunkles gefunden: Farbe davor bzw. Schwarz
+          prev = r.color;
+        }
+      }
+    }
+    return lines.filter((l) => l.runs.length);
+  }
+
+  /** Zeilen aus pdfTextLines → Textfelder für page.items (eins je Zeile, gemischte Formatierung möglich) */
+  function textBoxesFromLines(lines) {
+    return lines.map((l) => ({
+      type: "text",
+      x: l.x - GN_INSET_PT,
+      y: l.baseline - GN_ASCENT * l.size - GN_INSET_PT,
+      // etwas Luft, weil die Goodnotes-Schrift breiter sein kann als die des PDFs
+      w: l.width * 1.12 + 2 * GN_INSET_PT + l.size,
+      h: l.size * 1.3 + 2 * GN_INSET_PT,
+      font: l.runs[0].font,
+      size: l.size,
+      text: l.runs.map((r) => ({ text: r.text, size: r.size, font: r.font, bold: r.bold, italic: r.italic, color: r.color })),
+    }));
+  }
+
   // ---------- Bequeme Wege: Bilder / PDF → Goodnotes ----------
 
   // Seitengröße in pt für ein Bild: auf A4-Breite (Hochformat) bzw. A4-Höhe (Querformat) skaliert
@@ -1689,5 +1794,7 @@
     createRecorder, strokesFromOps,
     // allgemein
     buildDocument, fromImages, fromImagesPages, fromPdf, strokesFromCanvas, vectorize, makePdf, canvasToJpeg,
+    // getippter Text aus PDFs
+    pdfTextLines, textBoxesFromLines,
   };
 })();

@@ -13,7 +13,10 @@ Die Startseite ist ein **Hauptmenü** mit drei Bereichen (oben jederzeit über d
 
 - **🔄 Umwandeln** (`#/umwandeln`) – Bilder und PDFs umwandeln: Bilder → PDF, PDF → Bilder, JPG ↔ PNG ↔ WebP und
   Bilder/PDFs → Goodnotes. Mit „Schrift bearbeitbar machen“ wird dunkle Tinte auf Fotos/Scans (z. B. Handschrift)
-  zu Goodnotes-Strichen, die sich radieren und verschieben lassen. Alles läuft nur im Browser.
+  zu Goodnotes-Strichen, die sich radieren und verschieben lassen. Mit „Getippten Text bearbeitbar machen“ wird der
+  Text von PDFs (nicht bei eingescannten) Zeile für Zeile zu Goodnotes-Textfeldern – an derselben Stelle, mit Größe,
+  Farbe, fett/kursiv und passender Schriftart; der Hintergrund wird dafür ohne diesen Text übernommen. Alles läuft
+  nur im Browser.
 
   Im Umwandeln-Bereich gibt es zusätzlich den Reiter **📒 Goodnotes-Seite gestalten** (`#/goodnotes`), einen
   Goodnotes-Editor mit Textfeldern (Schrift, Größe, Farbe, fett/kursiv, Links auch auf andere Seiten), Formen
