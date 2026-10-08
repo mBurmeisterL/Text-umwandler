@@ -198,6 +198,7 @@
     $("cvEmpty").hidden = items.length > 0;
     $("cvClear").hidden = !items.length;
     $("cvGo").disabled = !items.length;
+    $("cvToEditor").disabled = !items.length;
   }
 
   // ---------- Umwandeln ----------
@@ -337,6 +338,64 @@
     }
   }
 
+  // ---------- In den Goodnotes-Editor übernehmen ----------
+
+  const hex = (c) => "#" + c.slice(0, 3).map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
+
+  // Jede Seite/jedes Bild wird eine Editor-Seite mit dem Bild als Hintergrund; mit „Schrift bearbeitbar
+  // machen“ wird die Tinte zu Strichen und der Hintergrund von ihr befreit
+  async function toEditor() {
+    const D = window.GoodnotesDesigner, G = window.GoodnotesExport;
+    if (!items.length || !D || !G) return;
+    const btn = $("cvToEditor");
+    btn.disabled = true;
+    const editable = $("cvEditable").checked;
+    const total = items.reduce((a, it) => a + it.pages, 0);
+    const pages = [];
+    try {
+      let n = 0;
+      for (const it of items) {
+        const sizes = it.kind === "pdf" ? (it.sizes || (it.sizes = await pdfPageSizes(it))) : null;
+        for (let i = 0; i < it.pages; i++) {
+          n++;
+          say(`Seite ${n} von ${total} wird übernommen …`, "busy");
+          await new Promise((r) => setTimeout(r, 30));
+          let canvas = it.kind === "pdf" ? await renderPdfPage(it, i, 1800) : imageCanvas(await loadImage(it.file), "#fff");
+          // Hintergrund nicht größer als nötig (Speicher im Browser)
+          const f = Math.min(1, 1800 / Math.max(canvas.width, canvas.height));
+          if (f < 1) {
+            const c = document.createElement("canvas");
+            c.width = Math.round(canvas.width * f);
+            c.height = Math.round(canvas.height * f);
+            c.getContext("2d").drawImage(canvas, 0, 0, c.width, c.height);
+            free(canvas);
+            canvas = c;
+          }
+          const sizePt = sizes ? sizes[i] : (canvas.height >= canvas.width
+            ? [595.28, (595.28 * canvas.height) / canvas.width]
+            : [841.89, (841.89 * canvas.height) / canvas.width]);
+          const k = sizePt[0] / canvas.width;
+          let bgCanvas = canvas, strokes = [];
+          if (editable) {
+            const r = G.strokesFromCanvas(canvas, { contrast: contrastValue() });
+            bgCanvas = r.cleaned;
+            strokes = r.strokes.map((st) => ({ type: "stroke", pts: st.pts.map(([x, y]) => [x * k, y * k]), w: st.w * k, color: hex(st.color) }));
+          }
+          pages.push({ sizePt, bg: bgCanvas.toDataURL("image/jpeg", 0.85), bgW: bgCanvas.width, bgH: bgCanvas.height, items: strokes });
+          if (bgCanvas !== canvas) free(bgCanvas);
+          free(canvas);
+        }
+      }
+      D.importPages(pages, items.length === 1 ? baseName(items[0].name) : "Umgewandelt");
+      say(`✓ ${pages.length} Seite${pages.length > 1 ? "n" : ""} im Goodnotes-Editor.`, "ok");
+      location.hash = "#/goodnotes";
+    } catch (e) {
+      say("Übernehmen ging nicht: " + (e && e.message ? e.message : e), "error");
+    } finally {
+      btn.disabled = !items.length;
+    }
+  }
+
   // ---------- Oberfläche ----------
 
   function say(msg, kind) {
@@ -354,6 +413,7 @@
     }
     $("cvPdfOptions").hidden = t !== "pdf";
     $("cvGnOptions").hidden = t !== "goodnotes";
+    $("cvToEditor").hidden = t !== "goodnotes";
     $("cvGo").textContent = `In ${TARGETS[t].label} umwandeln`;
     $("cvContrastField").hidden = !$("cvEditable").checked;
   }
@@ -380,6 +440,7 @@
     drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); });
     $("cvClear").addEventListener("click", () => { items = []; renderList(); say("", ""); });
     $("cvGo").addEventListener("click", convert);
+    $("cvToEditor").addEventListener("click", toEditor);
     $("cvEditable").addEventListener("change", () => selectTarget(target));
     selectTarget("pdf");
     renderList();

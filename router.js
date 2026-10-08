@@ -10,7 +10,7 @@
     handschrift: "Handschrift – Text-Umwandler",
     uebersetzen: "Übersetzen – Text-Umwandler",
     umwandeln: "Umwandeln – Text-Umwandler",
-    goodnotes: "Goodnotes-Seite – Text-Umwandler",
+    goodnotes: "Goodnotes-Seite gestalten – Text-Umwandler",
   };
 
   function currentView() {
@@ -21,8 +21,10 @@
   function show() {
     const view = currentView();
     for (const name of Object.values(VIEWS)) $("view-" + name).hidden = name !== view;
+    // Der Goodnotes-Editor gehört zum Bereich „Umwandeln“
+    const navView = view === "goodnotes" ? "umwandeln" : view;
     for (const a of document.querySelectorAll(".mainnav a[data-view]")) {
-      const active = a.dataset.view === view;
+      const active = a.dataset.view === navView;
       a.classList.toggle("active", active);
       if (active) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
