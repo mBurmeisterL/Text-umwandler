@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Umwandler">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=17">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -31,13 +31,14 @@
       </span>
       <div>
         <h1 class="brand-title">Text-Umwandler</h1>
-        <p class="brand-sub">Handschrift &amp; Übersetzen</p>
+        <p class="brand-sub">Handschrift, Übersetzen &amp; Umwandeln</p>
       </div>
     </a>
     <nav class="mainnav" aria-label="Hauptmenü">
       <a href="#/" data-view="home"><span aria-hidden="true">🏠</span><span class="nav-label">Start</span></a>
       <a href="#/handschrift" data-view="handschrift"><span aria-hidden="true">✍️</span><span class="nav-label">Handschrift</span></a>
       <a href="#/uebersetzen" data-view="uebersetzen"><span aria-hidden="true">🌍</span><span class="nav-label">Übersetzen</span></a>
+      <a href="#/umwandeln" data-view="umwandeln"><span aria-hidden="true">🔄</span><span class="nav-label">Umwandeln</span></a>
       <button type="button" id="openSettings" class="nav-settings" title="KI-Einstellungen" aria-label="KI-Einstellungen">⚙️</button>
     </nav>
   </header>
@@ -66,6 +67,12 @@
         <span class="home-icon" aria-hidden="true">🌍</span>
         <span class="home-title">Übersetzer</span>
         <span class="home-text">Text eintippen oder ein Foto hochladen – die KI liest den Text und übersetzt ihn in die gewünschte Sprache. Auf Wunsch gleich weiter in Handschrift.</span>
+        <span class="home-go">Öffnen →</span>
+      </a>
+      <a class="home-card" href="#/umwandeln">
+        <span class="home-icon" aria-hidden="true">🔄</span>
+        <span class="home-title">Datei-Umwandler</span>
+        <span class="home-text">Bilder in PDF, PDF in Bilder, JPG ↔ PNG ↔ WebP – und Bilder oder PDFs als Goodnotes-Datei, auf Wunsch mit bearbeitbarer Schrift.</span>
         <span class="home-go">Öffnen →</span>
       </a>
     </div>
@@ -310,6 +317,60 @@
     <p class="tr-status" id="trStatus" role="status"></p>
   </main>
 
+  <main id="view-umwandeln" class="view converter" hidden>
+    <section class="tr-head">
+      <h2>🔄 Umwandeln</h2>
+      <p>Bilder oder PDFs auswählen, Zielformat antippen, fertig. Alles passiert nur auf deinem Gerät – nichts wird hochgeladen.</p>
+    </section>
+
+    <div class="cv-grid">
+      <section class="card">
+        <div class="tr-bar">
+          <h3 class="card-title">1. Dateien</h3>
+          <button type="button" id="cvClear" class="btn ghost" hidden>🗑️ <span>Alle entfernen</span></button>
+        </div>
+        <label class="cv-drop" id="cvDrop">
+          <input type="file" id="cvFiles" accept="image/*,application/pdf,.pdf,.heic,.heif" multiple>
+          <span class="cv-drop-icon" aria-hidden="true">📂</span>
+          <strong>Bilder oder PDFs auswählen</strong>
+          <span class="muted">oder hierher ziehen · mehrere gleichzeitig möglich</span>
+        </label>
+        <p class="muted cv-empty" id="cvEmpty">Noch keine Dateien.</p>
+        <ul class="cv-list" id="cvList"></ul>
+      </section>
+
+      <section class="card">
+        <h3 class="card-title">2. Umwandeln in</h3>
+        <div class="cv-targets" id="cvTargets" role="radiogroup" aria-label="Zielformat"></div>
+        <div id="cvPdfOptions" class="cv-options">
+          <label class="field">
+            <span>Seitengröße</span>
+            <select id="cvPageSize">
+              <option value="a4">A4 (Bild eingepasst)</option>
+              <option value="image">Wie das Bild</option>
+            </select>
+          </label>
+        </div>
+        <div id="cvGnOptions" class="cv-options" hidden>
+          <label class="check">
+            <input type="checkbox" id="cvEditable">
+            <span><strong>Schrift bearbeitbar machen</strong><br><small class="muted">Für Fotos/Scans von Handschrift oder Zeichnungen: dunkle Tinte wird zu Goodnotes-Strichen (radierbar, mit dem Lasso verschiebbar). Ohne Haken bleiben Bilder/PDFs als Seiten, auf die du schreiben kannst.</small></span>
+          </label>
+          <label class="field" id="cvContrastField" hidden>
+            <span>Was zählt als Schrift?</span>
+            <select id="cvContrast">
+              <option value="0">nur kräftige, dunkle Schrift</option>
+              <option value="1" selected>normal</option>
+              <option value="2">auch helle Schrift (z. B. Bleistift)</option>
+            </select>
+          </label>
+        </div>
+        <button type="button" id="cvGo" class="btn primary cv-go" disabled>Umwandeln</button>
+        <p class="tr-status" id="cvStatus" role="status"></p>
+      </section>
+    </div>
+  </main>
+
   <div id="settingsDialog" class="hw-overlay" hidden>
     <div class="hw settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <header class="hw-head">
@@ -462,10 +523,12 @@
   <script src="scan.js?v=11" defer></script>
   <script src="dictate.js?v=15" defer></script>
   <script src="synth.js?v=13" defer></script>
-  <script src="goodnotes.js?v=1" defer></script>
-  <script src="app.js?v=16" defer></script>
+  <script src="share.js?v=1" defer></script>
+  <script src="goodnotes-kit/goodnotes.js?v=3" defer></script>
+  <script src="app.js?v=18" defer></script>
   <script src="translate.js?v=15" defer></script>
-  <script src="router.js?v=15" defer></script>
+  <script src="converter.js?v=2" defer></script>
+  <script src="router.js?v=16" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });

@@ -4,11 +4,12 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
-  const VIEWS = { "": "home", handschrift: "handschrift", uebersetzen: "uebersetzen" };
+  const VIEWS = { "": "home", handschrift: "handschrift", uebersetzen: "uebersetzen", umwandeln: "umwandeln" };
   const TITLES = {
     home: "Text-Umwandler",
     handschrift: "Handschrift – Text-Umwandler",
     uebersetzen: "Übersetzen – Text-Umwandler",
+    umwandeln: "Umwandeln – Text-Umwandler",
   };
 
   function currentView() {

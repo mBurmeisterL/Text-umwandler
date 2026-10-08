@@ -4,14 +4,21 @@ Eine kleine Webseite, die getippten Text in realistisch wirkende Handschrift ver
 
 ## Aufbau
 
-Die Startseite ist ein **Hauptmenü** mit zwei Bereichen (oben jederzeit über die Leiste erreichbar):
+Die Startseite ist ein **Hauptmenü** mit drei Bereichen (oben jederzeit über die Leiste erreichbar):
 
 - **✍️ Handschrift** (`#/handschrift`) – der Handschrift-Umwandler (siehe unten)
 - **🌍 Übersetzen** (`#/uebersetzen`) – Text eintippen oder ein Foto/Bild hochladen; die KI liest den
   Text aus dem Bild, übersetzt ihn in eine von 30 Sprachen (Ausgangssprache wird erkannt) und kann das
   Ergebnis direkt an den Handschrift-Umwandler übergeben
 
-Die **⚙️ KI-Einstellungen** (oben rechts) gelten für beide Bereiche.
+- **🔄 Umwandeln** (`#/umwandeln`) – Bilder und PDFs umwandeln: Bilder → PDF, PDF → Bilder, JPG ↔ PNG ↔ WebP und
+  Bilder/PDFs → Goodnotes. Mit „Schrift bearbeitbar machen“ wird dunkle Tinte auf Fotos/Scans (z. B. Handschrift)
+  zu Goodnotes-Strichen, die sich radieren und verschieben lassen. Alles läuft nur im Browser.
+
+Die **⚙️ KI-Einstellungen** (oben rechts) gelten für alle Bereiche.
+
+Der Goodnotes-Export ist ein eigenständiger Baustein in [`goodnotes-kit/`](goodnotes-kit/README.md)
+(eine Datei, keine Abhängigkeiten) und lässt sich in andere Projekte kopieren.
 
 ## Als App installieren
 

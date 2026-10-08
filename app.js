@@ -568,22 +568,9 @@
 
   const toBlob = (c) => new Promise((res) => c.toBlob(res, "image/png"));
 
-  async function shareOrDownload(files) {
-    if (navigator.canShare && navigator.canShare({ files })) {
-      try {
-        await navigator.share({ files, title: "Handschrift" });
-        return true;
-      } catch (e) {
-        if (e.name === "AbortError") return true;
-      }
-    }
-    for (const f of files) {
-      const url = URL.createObjectURL(f);
-      download(url, f.name);
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    return false;
+  // Teilen-Menü bzw. Download; bei langer Rechenzeit über das Fertig-Fenster (Safari)
+  async function shareOrDownload(files, opts) {
+    return (await window.ShareFiles.deliver(files, opts)) !== "downloaded";
   }
 
   async function exportTransparent(mode) {
@@ -723,10 +710,14 @@
       return;
     }
     const file = new File([blob], "handschrift.goodnotes", { type: "application/octet-stream" });
-    const shared = await shareOrDownload([file]);
-    els.status.textContent = shared
-      ? "In Goodnotes öffnen – die Schrift ist dort radierbar und mit dem Lasso verschiebbar."
-      : "„handschrift.goodnotes“ heruntergeladen – in Goodnotes über „Importieren“ öffnen.";
+    els.status.textContent = "Goodnotes-Datei ist fertig.";
+    const how = await window.ShareFiles.deliver([file], {
+      title: "Goodnotes-Datei ist fertig",
+      shareLabel: "📤 An Goodnotes senden",
+      hint: "Im Teilen-Menü „Goodnotes“ antippen (eventuell unter „Mehr“). Oder „Speichern“ und die Datei in der Dateien-App antippen.",
+    });
+    if (how === "shared") els.status.textContent = "An Goodnotes gesendet – die Schrift ist dort radierbar und mit dem Lasso verschiebbar.";
+    else if (how === "downloaded") els.status.textContent = "„handschrift.goodnotes“ gespeichert – in der Dateien-App antippen oder in Goodnotes über „Importieren“ öffnen.";
   }
 
   // ---------- KI-Helfer ----------
