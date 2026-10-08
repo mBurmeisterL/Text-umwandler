@@ -17,7 +17,8 @@
   let drag = null;     // laufende Zeiger-Aktion
 
   const page = () => doc.pages[doc.current];
-  const size = (p = page()) => (p.landscape ? [A4[1], A4[0]] : A4);
+  // Seiten aus dem Umwandler haben eine eigene Größe (sizePt) und ein Bild als Hintergrund (bg)
+  const size = (p = page()) => p.sizePt || (p.landscape ? [A4[1], A4[0]] : A4);
 
   // ---------- Speichern ----------
 
@@ -194,7 +195,7 @@
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     $("gdPaperWrap").style.aspectRatio = `${W} / ${H}`;
     svg.textContent = "";
-    el("image", { href: paperCanvas(page().paper, page().landscape).url, x: 0, y: 0, width: W, height: H, preserveAspectRatio: "none", "pointer-events": "none" }, svg);
+    el("image", { href: page().bg || paperCanvas(page().paper, page().landscape).url, x: 0, y: 0, width: W, height: H, preserveAspectRatio: "none", "pointer-events": "none" }, svg);
     // Wie in Goodnotes: Bilder liegen unter allem anderen
     const below = el("g", {}, svg), above = el("g", {}, svg);
     page().items.forEach((it, i) => drawItem(it, i, it.type === "image" ? below : above));
@@ -558,7 +559,11 @@
 
   function syncPageFields() {
     const p = page();
-    $("gdPaper").value = p.paper;
+    // Seiten mit Bild/PDF als Hintergrund: Papier und Format stehen fest
+    const opt = $("gdPaper").querySelector('option[value="image"]');
+    opt.hidden = !p.bg;
+    $("gdPaper").value = p.bg ? "image" : p.paper;
+    $("gdFormat").disabled = !!p.sizePt;
     $("gdFormat").value = p.landscape ? "landscape" : "portrait";
     $("gdBookmark").checked = !!p.bookmark;
     $("gdOutline").value = p.outline || "";
@@ -578,6 +583,21 @@
     const out = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
+  }
+
+  // Hintergrundbild einer Seite als Canvas (weißer Untergrund)
+  async function bgCanvas(p) {
+    const im = new Image();
+    im.src = p.bg;
+    await im.decode();
+    const c = document.createElement("canvas");
+    c.width = p.bgW || im.naturalWidth;
+    c.height = p.bgH || im.naturalHeight;
+    const x = c.getContext("2d");
+    x.fillStyle = "#fff";
+    x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(im, 0, 0, c.width, c.height);
+    return c;
   }
 
   function toLink(s) {
@@ -622,9 +642,12 @@
       const bgs = new Map();
       const pages = [];
       for (const p of doc.pages) {
-        const sizePt = p.landscape ? [A4[1], A4[0]] : A4;
+        const sizePt = size(p);
         let background;
-        if (p.paper !== "blank") {
+        if (p.bg) {
+          const jpeg = await G.canvasToJpeg(await bgCanvas(p), 0.88);
+          background = { pdf: G.makePdf([{ wPt: sizePt[0], hPt: sizePt[1], jpeg, imgW: p.bgW, imgH: p.bgH }]), page: 1 };
+        } else if (p.paper !== "blank") {
           const key = p.paper + p.landscape;
           if (!bgs.has(key)) {
             const { canvas } = paperCanvas(p.paper, p.landscape);
@@ -635,7 +658,7 @@
         }
         pages.push({ sizePt, background, bookmark: p.bookmark, outline: p.outline || undefined, items: p.items.map(exportItem) });
       }
-      const first = paperCanvas(doc.pages[0].paper, doc.pages[0].landscape).canvas;
+      const first = doc.pages[0].bg ? await bgCanvas(doc.pages[0]) : paperCanvas(doc.pages[0].paper, doc.pages[0].landscape).canvas;
       const t = document.createElement("canvas");
       t.width = 300;
       t.height = Math.round((300 * first.height) / first.width);
@@ -690,7 +713,15 @@
       selected = -1;
       syncPageFields(); renderPages(); showProps(); render(); save();
     });
-    $("gdPaper").addEventListener("change", (e) => { page().paper = e.target.value; render(); save(); });
+    $("gdPaper").addEventListener("change", (e) => {
+      const p = page();
+      if (p.bg && e.target.value !== "image") {
+        if (!confirm("Das Bild bzw. die PDF-Seite als Hintergrund entfernen?")) { e.target.value = "image"; return; }
+        delete p.bg; delete p.bgW; delete p.bgH; delete p.sizePt;
+      }
+      if (e.target.value !== "image") p.paper = e.target.value;
+      syncPageFields(); render(); save();
+    });
     $("gdFormat").addEventListener("change", (e) => { page().landscape = e.target.value === "landscape"; render(); save(); });
     $("gdBookmark").addEventListener("change", (e) => { page().bookmark = e.target.checked; renderPages(); save(); });
     $("gdOutline").addEventListener("input", (e) => { page().outline = e.target.value; renderPages(); save(); });
@@ -719,4 +750,22 @@
   }
 
   init();
+
+  /**
+   * Seiten aus dem Umwandler übernehmen: [{ sizePt, bg (Daten-URL), bgW, bgH, items }].
+   * Ist der Editor noch leer, werden sie statt der leeren Seite eingesetzt, sonst hinten angehängt.
+   */
+  window.GoodnotesDesigner = {
+    importPages(list, title) {
+      const empty = doc.pages.length === 1 && !doc.pages[0].items.length && !doc.pages[0].bg;
+      const pages = list.map((p) => ({ ...newPage(), paper: "blank", ...p }));
+      if (empty) doc.pages = pages;
+      else doc.pages.push(...pages);
+      doc.current = empty ? 0 : doc.pages.length - pages.length;
+      if (title && empty) { doc.title = title; $("gdTitle").value = title; }
+      selected = -1;
+      saveNow();
+      syncPageFields(); renderPages(); showProps(); render();
+    },
+  };
 })();

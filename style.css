@@ -198,6 +198,14 @@ body {
 .cv-options { display: flex; flex-direction: column; gap: 12px; }
 .cv-go { padding: 12px 18px; font-size: 1rem; }
 
+.cv-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
+.cv-tabs a {
+  padding: 9px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--card);
+  color: var(--text); text-decoration: none; font-weight: 600; font-size: .92rem;
+}
+.cv-tabs a.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+#cvToEditor { border: 1px solid var(--border); justify-content: center; }
+
 /* ---------- Goodnotes-Seite gestalten ---------- */
 
 .designer { max-width: 1400px; margin: 0 auto; padding: 16px 28px 56px; }

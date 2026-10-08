@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Umwandler">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=19">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -39,7 +39,6 @@
       <a href="#/handschrift" data-view="handschrift"><span aria-hidden="true">✍️</span><span class="nav-label">Handschrift</span></a>
       <a href="#/uebersetzen" data-view="uebersetzen"><span aria-hidden="true">🌍</span><span class="nav-label">Übersetzen</span></a>
       <a href="#/umwandeln" data-view="umwandeln"><span aria-hidden="true">🔄</span><span class="nav-label">Umwandeln</span></a>
-      <a href="#/goodnotes" data-view="goodnotes"><span aria-hidden="true">📒</span><span class="nav-label">Goodnotes</span></a>
       <button type="button" id="openSettings" class="nav-settings" title="KI-Einstellungen" aria-label="KI-Einstellungen">⚙️</button>
     </nav>
   </header>
@@ -73,13 +72,7 @@
       <a class="home-card" href="#/umwandeln">
         <span class="home-icon" aria-hidden="true">🔄</span>
         <span class="home-title">Datei-Umwandler</span>
-        <span class="home-text">Bilder in PDF, PDF in Bilder, JPG ↔ PNG ↔ WebP – und Bilder oder PDFs als Goodnotes-Datei, auf Wunsch mit bearbeitbarer Schrift.</span>
-        <span class="home-go">Öffnen →</span>
-      </a>
-      <a class="home-card" href="#/goodnotes">
-        <span class="home-icon" aria-hidden="true">📒</span>
-        <span class="home-title">Goodnotes-Seite</span>
-        <span class="home-text">Seiten gestalten wie in Goodnotes: Textfelder, Formen, Haftnotizen, Pfeile, Bilder, Stift und Textmarker – alles bleibt in Goodnotes bearbeitbar.</span>
+        <span class="home-text">Bilder in PDF, PDF in Bilder, JPG ↔ PNG ↔ WebP – und Bilder oder PDFs als Goodnotes-Datei, auf Wunsch mit bearbeitbarer Schrift. Dazu ein Goodnotes-Editor für Text, Formen, Pfeile, Haftnotizen und mehr.</span>
         <span class="home-go">Öffnen →</span>
       </a>
     </div>
@@ -325,6 +318,10 @@
   </main>
 
   <main id="view-umwandeln" class="view converter" hidden>
+    <nav class="cv-tabs" aria-label="Umwandeln">
+      <a href="#/umwandeln" class="active" aria-current="page">🔄 Dateien umwandeln</a>
+      <a href="#/goodnotes">📒 Goodnotes-Seite gestalten</a>
+    </nav>
     <section class="tr-head">
       <h2>🔄 Umwandeln</h2>
       <p>Bilder oder PDFs auswählen, Zielformat antippen, fertig. Alles passiert nur auf deinem Gerät – nichts wird hochgeladen.</p>
@@ -373,15 +370,20 @@
           </label>
         </div>
         <button type="button" id="cvGo" class="btn primary cv-go" disabled>Umwandeln</button>
+        <button type="button" id="cvToEditor" class="btn ghost cv-go" disabled hidden title="Text, Formen, Pfeile, Haftnotizen … ergänzen">✏️ Im Goodnotes-Editor weiterbearbeiten</button>
         <p class="tr-status" id="cvStatus" role="status"></p>
       </section>
     </div>
   </main>
 
   <main id="view-goodnotes" class="view designer" hidden>
+    <nav class="cv-tabs" aria-label="Umwandeln">
+      <a href="#/umwandeln">🔄 Dateien umwandeln</a>
+      <a href="#/goodnotes" class="active" aria-current="page">📒 Goodnotes-Seite gestalten</a>
+    </nav>
     <section class="tr-head">
-      <h2>📒 Goodnotes-Seite</h2>
-      <p>Elemente hinzufügen, antippen zum Bearbeiten, ziehen zum Verschieben. Am Ende als Goodnotes-Datei senden – dort bleibt alles bearbeitbar.</p>
+      <h2>📒 Goodnotes-Seite gestalten</h2>
+      <p>Elemente hinzufügen, antippen zum Bearbeiten, ziehen zum Verschieben. Bilder und PDFs holst du über „Dateien umwandeln“ → Goodnotes → „Im Goodnotes-Editor weiterbearbeiten“ herein. Am Ende als Goodnotes-Datei senden – dort bleibt alles bearbeitbar.</p>
     </section>
 
     <div class="gd-toolbar card" role="toolbar" aria-label="Werkzeuge">
@@ -421,6 +423,7 @@
           <select id="gdPaper">
             <option value="blank">Blanko</option><option value="lined">Liniert</option>
             <option value="grid">Kariert</option><option value="dotted">Punktiert</option>
+            <option value="image" hidden>Bild / PDF</option>
           </select>
         </label>
         <label class="field"><span>Format</span>
@@ -606,9 +609,9 @@
   <script src="goodnotes-kit/goodnotes.js?v=4" defer></script>
   <script src="app.js?v=18" defer></script>
   <script src="translate.js?v=15" defer></script>
-  <script src="converter.js?v=2" defer></script>
-  <script src="designer.js?v=2" defer></script>
-  <script src="router.js?v=17" defer></script>
+  <script src="converter.js?v=3" defer></script>
+  <script src="designer.js?v=3" defer></script>
+  <script src="router.js?v=18" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });

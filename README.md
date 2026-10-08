@@ -4,7 +4,7 @@ Eine kleine Webseite, die getippten Text in realistisch wirkende Handschrift ver
 
 ## Aufbau
 
-Die Startseite ist ein **Hauptmenü** mit vier Bereichen (oben jederzeit über die Leiste erreichbar):
+Die Startseite ist ein **Hauptmenü** mit drei Bereichen (oben jederzeit über die Leiste erreichbar):
 
 - **✍️ Handschrift** (`#/handschrift`) – der Handschrift-Umwandler (siehe unten)
 - **🌍 Übersetzen** (`#/uebersetzen`) – Text eintippen oder ein Foto/Bild hochladen; die KI liest den
@@ -15,12 +15,13 @@ Die Startseite ist ein **Hauptmenü** mit vier Bereichen (oben jederzeit über d
   Bilder/PDFs → Goodnotes. Mit „Schrift bearbeitbar machen“ wird dunkle Tinte auf Fotos/Scans (z. B. Handschrift)
   zu Goodnotes-Strichen, die sich radieren und verschieben lassen. Alles läuft nur im Browser.
 
-- **📒 Goodnotes-Seite** (`#/goodnotes`): Seiten gestalten wie in Goodnotes. Es gibt Textfelder (Schrift, Größe,
-  Farbe, fett/kursiv, Links auch auf andere Seiten), Formen (Rechteck, Ellipse, Dreieck, mit Füllung, Rand und
-  Strichelung), Haftnotizen, Linien und Pfeile (gerade, gebogen, gewinkelt), Bilder (drehbar, PNG mit Transparenz),
-  sowie Stift, Textmarker, Bleistift und Radierer zum direkten Schreiben. Pro Seite lassen sich Papier (blanko,
-  liniert, kariert, punktiert), Hoch-/Querformat, Lesezeichen und ein Eintrag im Inhaltsverzeichnis einstellen.
-  Alles wird im Browser gespeichert und als `.goodnotes`-Datei gesendet; in Goodnotes bleibt alles bearbeitbar.
+  Im Umwandeln-Bereich gibt es zusätzlich den Reiter **📒 Goodnotes-Seite gestalten** (`#/goodnotes`), einen
+  Goodnotes-Editor mit Textfeldern (Schrift, Größe, Farbe, fett/kursiv, Links auch auf andere Seiten), Formen
+  (Rechteck, Ellipse, Dreieck, mit Füllung, Rand und Strichelung), Haftnotizen, Linien und Pfeilen, Bildern sowie Stift,
+  Textmarker, Bleistift und Radierer. Pro Seite lassen sich Papier, Format, Lesezeichen und ein Eintrag im
+  Inhaltsverzeichnis einstellen. Mit **„✏️ Im Goodnotes-Editor weiterbearbeiten“** (Zielformat Goodnotes) kommen
+  Bilder und PDFs als Seiten in den Editor, auf Wunsch mit bearbeitbarer Schrift. Gesendet wird als `.goodnotes`-Datei,
+  in der alles bearbeitbar bleibt.
 
 Die **⚙️ KI-Einstellungen** (oben rechts) gelten für alle Bereiche.
 
