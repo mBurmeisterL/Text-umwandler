@@ -6,6 +6,8 @@
 //   - Schrift aus Fotos/Scans in bearbeitbare Striche umwandeln (strokesFromCanvas)
 //   - Canvas-Zeichnungen (fillText, drawImage) aufzeichnen und in Striche umwandeln (createRecorder)
 //   - kleine PDFs aus JPEGs bauen (makePdf)
+//   - alle Goodnotes-Elemente: Textfelder, Formen, Textmarker, Bleistift, Form-Werkzeug, Haftnotizen,
+//     Linien/Pfeile, Bilder, Links, Lesezeichen, Seitendrehung, Inhaltsverzeichnis (page.items)
 // Benutzung und Beispiele: README.md in diesem Ordner. Alles hängt an window.GoodnotesExport.
 //
 // Das Dateiformat ist nicht offiziell dokumentiert; der Aufbau folgt Dateien aus der Goodnotes-App
@@ -651,7 +653,7 @@
     const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("").toUpperCase();
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
   };
-  const stamp = (counter = 1) => [[1, "v", counter], [2, "v", rnd32()]];
+  const stamp = (counter = 1) => (counter ? [[1, "v", counter], [2, "v", rnd32()]] : [[2, "v", rnd32()]]);
 
   // „UUID + 1“: die Striche einer Seite liegen in notes/<Seiten-ID + 1>
   function uuidPlusOne(u) {
@@ -1170,6 +1172,228 @@
     return { strokes, cleaned };
   }
 
+  // ---------- Weitere Goodnotes-Elemente ----------
+  // Aufbau nach goodnotes-codec (model.py: new_box, new_sticky, new_line, new_image, new_shape_stroke,
+  // new_pencil_stroke, rich_text), dort in Goodnotes geprüft. Alle Koordinaten und Größen sind im
+  // Koordinatensystem der Seite (sizePx) und werden mit k in Goodnotes-Einheiten umgerechnet.
+
+  const pointMsg = (x, y) => [...(x ? [[1, "f", x]] : []), ...(y ? [[2, "f", y]] : [])];
+  const INHERIT = -404; // „wie Standard“ in Zeichenattributen
+  const U64_MAX = (1n << 64n) - 1n;
+
+  // Leerer Text einer Form, genau wie Goodnotes ihn schreibt, mit seinem Prüfwert
+  const EMPTY_TEXT = Uint8Array.from(atob(
+    "Cl0SLhoUDfHw8D0V2djYPR3Z2Ng9JQAAgD/FAgAAgEHgA+z8/////////wG1BAAAysMaKwoCCgASCwj///////////8BGhYI////////////ARD///////////8BIAI="),
+    (c) => c.charCodeAt(0));
+  const EMPTY_TEXT_HASH = Uint8Array.from([0xaf, 0xd2, 0xf3, 0xd3, 0x8e, 0x51, 0x6a, 0xda]);
+
+  /**
+   * Formatierter Text. runs: Text oder [{ text, color, font, size, bold, italic, link }, …]
+   * size in Goodnotes-Einheiten (bereits umgerechnet). link: URL oder { page: Seitenindex }.
+   */
+  function richText(runs, ctx) {
+    const list = typeof runs === "string" ? [{ text: runs }] : runs;
+    return list.map((r) => {
+      const a = [[3, "s", colorMsg(toRgba(r.color || [0.118, 0.106, 0.106, 1]))]];
+      if (r.link !== undefined && r.link !== null) a.push([4, "s", linkUrl(r.link, ctx)]);
+      if (r.font) a.push([30, "s", r.font]);
+      a.push([40, "f", r.size ?? INHERIT]);
+      if (r.italic) a.push([50, "v", 1]);
+      a.push([60, "v", r.bold ? -30 : INHERIT]);
+      a.push([70, "f", INHERIT]);
+      const para = [[1, "s", [[1, "s", ""]]], [2, "s", [[1, "v", U64_MAX]]], [3, "s", [[1, "v", U64_MAX], [2, "v", U64_MAX]]]];
+      return [1, "s", [[1, "s", r.text || ""], [2, "s", a], [3, "s", para]]];
+    });
+  }
+
+  function linkUrl(link, ctx) {
+    if (typeof link === "string") return link;
+    const pageId = ctx.pageIds[link.page];
+    if (!pageId) return "";
+    const anchor = encodeURIComponent(btoa(`page-${pageId}`));
+    return `https://app.goodnotes.com/documents/?anchor=${anchor}#${btoa(ctx.docId).replace(/=+$/, "")}`;
+  }
+
+  // Text-Halter {2 Text (bv41), 3 Prüfwert, 4 1}: Goodnotes prüft den Prüfwert nicht
+  function textHolder(runs, ctx) {
+    if (runs === undefined || runs === null || runs === "") {
+      return [[2, "s", bv41(EMPTY_TEXT)], [3, "s", EMPTY_TEXT_HASH], [4, "v", 1]];
+    }
+    const body = encode(richText(runs, ctx));
+    return [[2, "s", bv41(body)], [3, "s", crypto.getRandomValues(new Uint8Array(8))], [4, "v", 1]];
+  }
+
+  function defaultTextAttrs(font = "Helvetica Neue", size = 24) {
+    const a = [[3, "s", [[4, "f", 1]]], [30, "s", font], [40, "f", size], [60, "v", -60], [70, "f", -20]];
+    const p = [[1, "s", [[1, "s", ""]]], [2, "s", ""], [3, "s", [[1, "v", U64_MAX], [2, "v", U64_MAX]]]];
+    return [[1, "s", a], [2, "s", p]];
+  }
+
+  // Linienstil {1 Breite, 2 {1 durchgezogen | 2 {1 Strich, 2 Lücke}}, 3 {1 Farbe}}
+  function strokeStyle(width, color, dash) {
+    const pattern = dash
+      ? [[2, "s", [...(dash[0] ? [[1, "f", dash[0]]] : []), [2, "f", dash[1]]]]]
+      : [[1, "s", ""]];
+    return [[1, "f", width], [2, "s", pattern], [3, "s", [[1, "s", colorMsg(toRgba(color))]]]];
+  }
+  const DASHES = { dashed: [3, 4], dotted: [0, 2] };
+  const dashOf = (d) => (Array.isArray(d) ? d : DASHES[d] || null);
+  const ARROWS = { none: 0, open: 1, filled: 2 };
+  const arrowOf = (a) => (typeof a === "number" ? a : a === true ? 1 : ARROWS[a] || 0);
+
+  function templateBlob(schema, write) {
+    const parts = [];
+    const sch = enc.encode(schema + "\0");
+    const vals = [];
+    write({
+      u16: (v) => { const b = new Uint8Array(2); new DataView(b.buffer).setUint16(0, v, true); vals.push(b); },
+      u32: (v) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, v >>> 0, true); vals.push(b); },
+      f32: (v) => { const b = new Uint8Array(4); new DataView(b.buffer).setFloat32(0, v, true); vals.push(b); },
+    });
+    const body = concat(vals);
+    const head = new Uint8Array(8);
+    head.set(enc.encode("tpl\0"), 0);
+    new DataView(head.buffer).setUint32(4, 8 + sch.length + body.length, true);
+    parts.push(head, sch, body);
+    return bv41(concat(parts));
+  }
+
+  // Hülle eines Strichs (Stift 0 = Kugelschreiber, 5 = Bleistift)
+  function strokeShell(ctx, color, geometry, { pen = 0, highlighter = false, shape = null } = {}) {
+    const id = uuid(), st = stamp(2);
+    const body = [[1, "s", id], [2, "s", geometry]];
+    if (pen) body.push([3, "v", pen]);
+    body.push([4, "s", colorMsg(toRgba(color))]);
+    if (highlighter) body.push([5, "v", 1]);
+    body.push([6, "s", ""], [7, "s", [[1, "s", stamp(1)]]], [9, "s", shape || ""], [15, "s", st], [20, "s", ""], [21, "v", 24]);
+    return [ctx.meta(id, st), [[7, "s", body]]];
+  }
+
+  const PENCIL_SCHEMA = "vuA(v)A(S(uuuuu))A(S(uuuuuuuuuuu))A(S(uu))A(v)A(S(uu))A(S(uuuu))A(u)";
+
+  function buildItem(it, ctx) {
+    const k = ctx.k;
+    const P = (p) => [p[0] * k, p[1] * k];
+    switch (it.type) {
+      case "stroke":
+      case "highlighter": {
+        const hl = it.type === "highlighter";
+        const color = it.color || (hl ? [1, 0.85, 0, 0.5] : ctx.ink || "#000000");
+        const rgba = toRgba(color);
+        if (hl && rgba[3] === 1) rgba[3] = 0.5;
+        const w = (it.w ?? (hl ? 20 : 2)) * k;
+        return strokeShell(ctx, rgba, strokeGeometry(densify(it.pts.map(P), 6), Math.max(0.3, w)), { highlighter: hl });
+      }
+      case "pencil": {
+        // Bleistift: je Punkt x, y, Azimut, Höhe, Druck; jedes Kurvenstück beginnt mit einem Textur-Zufallswert
+        const pts = densify(it.pts.map(P), 6);
+        const f = it.pressure ?? 0.6;
+        const p5 = (q) => [q[0], q[1], 0.5, 1, f];
+        const w = (it.w ?? 2) * k;
+        const geometry = templateBlob(PENCIL_SCHEMA, ({ u16, u32, f32 }) => {
+          u16(1); f32(w / 2);
+          u32(pts.length); u16(0); for (let i = 1; i < pts.length; i++) u16(1);
+          u32(1); p5(pts[0]).forEach(f32);
+          u32(pts.length - 1);
+          for (let i = 1; i < pts.length; i++) {
+            u32(rnd32());
+            p5([(pts[i - 1][0] + pts[i][0]) / 2, (pts[i - 1][1] + pts[i][1]) / 2]).forEach(f32);
+            p5(pts[i]).forEach(f32);
+          }
+          for (let a = 0; a < 5; a++) u32(0);
+        });
+        return strokeShell(ctx, it.color || [0.2, 0.2, 0.2, 1], geometry, { pen: 5 });
+      }
+      case "shapeStroke": {
+        // Mit dem Form-Werkzeug gezeichnet: leerer Pfad plus Beschreibung der Form
+        const w = (it.w ?? 2.5) * k;
+        let d;
+        if (it.shape === "rect") d = [[3, "s", [[1, "s", pointMsg(...P(it.center))], [2, "s", pointMsg(...P(it.size))]]]];
+        else if (it.shape === "ellipse") d = [[4, "s", [[1, "s", pointMsg(...P(it.center))], [2, "s", pointMsg(...P(it.radii))], ...(it.angle ? [[3, "f", it.angle]] : [])]]];
+        else d = [[1, "s", it.points.map((p) => [1, "s", pointMsg(...P(p))])]];
+        d.push([5, "s", [[2, "v", 1]]], [15, "f", w]);
+        const geometry = templateBlob(PSTROKE, ({ u16, u32, f32 }) => { u16(2); f32(w / 2); u32(0); u32(0); u32(0); u16(1); u32(0); });
+        return strokeShell(ctx, it.color || ctx.ink || "#000000", geometry, { shape: d });
+      }
+      case "shape":
+      case "text": {
+        const id = uuid(), st = stamp();
+        const b = [[1, "s", id], [2, "v", 35], [3, "s", st], [7, "s", [[1, "s", stamp()]]]];
+        b.push([20, "s", [[1, "s", pointMsg(it.x * k, it.y * k)], [3, "f", 1]]]);
+        b.push([21, "s", [[2, "s", [...pointMsg(it.w * k, it.h * k), [3, "f", Infinity]]]]]);
+        let geo;
+        const shape = it.type === "text" ? "rect" : it.shape || "rect";
+        if (shape === "ellipse") geo = [[2, "s", ""]];
+        else if (shape === "polygon") {
+          geo = [[3, "s", [[1, "s", [...it.vertices.map(([x, y]) => [1, "s", [[1, "s", pointMsg(x, y)], [2, "v", 1]]]), [2, "v", 1]]]]]];
+        } else if (it.radius) geo = [[1, "s", [[1, "f", it.radius * k]]]];
+        else geo = [[1, "s", ""]];
+        b.push([22, "s", geo]);
+        b.push([30, "s", [[1, "s", it.fill ? [[1, "s", colorMsg(toRgba(it.fill))]] : ""]]]);
+        b.push([31, "s", it.outline
+          ? strokeStyle((it.outline.width ?? 2) * k, it.outline.color || "#000000", dashOf(it.outline.dash))
+          : [[2, "s", [[1, "s", ""]]]]]);
+        const size = (it.size ?? 24 / k) * k;
+        const runs = typeof it.text === "string"
+          ? [{ text: it.text, color: it.color, font: it.font, size, bold: it.bold, italic: it.italic, link: it.link }]
+          : (it.text || []).map((r) => ({ ...r, size: r.size !== undefined ? r.size * k : size }));
+        const t = [
+          [1, "s", textHolder(it.text ? runs : null, ctx)],
+          [5, "s", defaultTextAttrs(it.font || "Helvetica Neue", size)],
+          [10, "s", [1, 2, 3, 4].map((n) => [n, "f", 10])],
+        ];
+        b.push([32, "s", t]);
+        return [ctx.meta(id, st, 35), [[21, "s", b]]];
+      }
+      case "sticky": {
+        const id = uuid(), st = stamp(4);
+        const size = (it.size ?? 24 / k) * k;
+        const b = [[1, "s", id], [2, "v", 35], [3, "s", st], [7, "s", [[1, "s", stamp()]]],
+          [20, "s", [[1, "s", pointMsg(it.x * k, it.y * k)], [3, "f", 1]]],
+          [21, "s", [[2, "s", [...pointMsg((it.w ?? 256 / k) * k, (it.h ?? 256 / k) * k), [3, "f", Infinity]]]]],
+          [30, "s", colorMsg(toRgba(it.color || [0.98, 0.906, 0.471, 1]))]];
+        const t = [[5, "s", defaultTextAttrs()]];
+        if (it.text) t.push([1, "s", textHolder(typeof it.text === "string" ? [{ text: it.text, size }] : it.text, ctx)]);
+        b.push([31, "s", t], [40, "v", 1], [41, "v", 1]);
+        return [ctx.meta(id, st, 35), [[20, "s", b]]];
+      }
+      case "line": {
+        const id = uuid(), st = stamp();
+        const b = [[1, "s", id], [2, "v", 31], [3, "s", st], [7, "s", [[1, "s", stamp()]]]];
+        const a = P(it.from), e = P(it.to);
+        const m = it.via ? P(it.via) : [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2];
+        if (it.elbow) {
+          b.push([21, "s", [[1, "s", [[1, "s", pointMsg(...a)]]], [3, "s", [[1, "s", pointMsg(...e)]]], [5, "s", [[2, "s", pointMsg(...m)]]]]]);
+        } else {
+          b.push([20, "s", [[1, "s", [[1, "s", pointMsg(...a)]]], [2, "s", pointMsg(...m)], [3, "s", [[1, "s", pointMsg(...e)]]]]]);
+        }
+        const sa = arrowOf(it.startArrow), ea = arrowOf(it.endArrow);
+        if (sa) b.push([30, "v", sa]);
+        if (ea) b.push([31, "v", ea]);
+        b.push([32, "s", strokeStyle((it.w ?? 3) * k, it.color || ctx.ink || "#000000", dashOf(it.dash))]);
+        return [ctx.meta(id, st, 31), [[22, "s", b]]];
+      }
+      case "image": {
+        const aid = ctx.attachment(it.data);
+        const id = uuid(), st = stamp(6);
+        const w = it.w * k, h = it.h * k;
+        const cx = (it.x + it.w / 2) * k, cy = (it.y + it.h / 2) * k;
+        const ang = it.angle || 0;
+        const bw = Math.abs(w * Math.cos(ang)) + Math.abs(h * Math.sin(ang));
+        const bh = Math.abs(w * Math.sin(ang)) + Math.abs(h * Math.cos(ang));
+        const b = [
+          [1, "s", id],
+          [2, "s", [[1, "s", pointMsg(cx - bw / 2, cy - bh / 2)], [2, "s", pointMsg(bw, bh)]]],
+          [3, "s", [[1, "s", pointMsg(cx, cy)], [2, "s", pointMsg(w, h)], ...(ang ? [[3, "f", ang]] : [])]],
+          [4, "s", aid], [5, "s", [[1, "s", stamp()]]], [6, "v", 1], [15, "s", st], [18, "v", 24],
+        ];
+        return [ctx.meta(id, st, 24, aid), [[1, "s", b]]];
+      }
+      default:
+        throw new Error(`Unbekannter Elementtyp: ${it.type}`);
+    }
+  }
+
   // ---------- Dokument zusammenbauen ----------
 
   // Goodnotes rechnet in Einheiten von 1/1,8333 pt (A4 = 1091,35 × 1543,46)
@@ -1187,6 +1411,9 @@
    *   sizePt:     [Breite, Höhe] in pt (Standard: opts.pagePt oder A4)
    *   sizePx:     [Breite, Höhe] des Koordinatensystems der Striche (Standard: opts.pagePx oder sizePt)
    *   background: { pdf: Uint8Array, page: 1 }  – Seite eines PDFs als Hintergrund (Standard: weiß)
+   *   items:      [{ type: "text" | "shape" | "sticky" | "line" | "image" | "stroke" | "highlighter" |
+   *                       "pencil" | "shapeStroke", … }]  – siehe buildItem und README.md
+   *   bookmark, rotation (90/180/270), outline ("Titel im Inhaltsverzeichnis")
    * }]
    * opts: { title, ink (Standardfarbe, "#rrggbb"), thumbnail (JPEG-Bytes), language ("de_DE"),
    *         pagePt, pagePx, background (PDF-Bytes für alle Seiten) }
@@ -1262,14 +1489,16 @@
     const notesIndex = [];
     let key = "";
     let firstPageId = null;
-    for (const page of pages) {
+    const pageIds = pages.map(() => uuid());
+    let outlineKey = "";
+    for (const [pageIndex, page] of pages.entries()) {
       const sizePt = page.sizePt || opts.pagePt || A4;
       const sizePx = page.sizePx || opts.pagePx || sizePt;
       const bg = page.background || (opts.background ? { pdf: opts.background, page: 1 } : null);
       const layerId = layer(bg, sizePt);
       const k = (sizePt[0] * GN_PER_PT) / sizePx[0];
 
-      const pageId = uuid();
+      const pageId = pageIds[pageIndex];
       const notesId = uuidPlusOne(pageId);
       key = keyAfter(key);
       events.push([[1, "s", pageId], [54, "s", [
@@ -1304,6 +1533,43 @@
           [21, "v", 24],
         ]]]);
       }
+      // Weitere Elemente: Textfelder, Formen, Haftnotizen, Linien, Bilder, Textmarker, Bleistift …
+      const ctx = {
+        k, device, docId, pageIds, seq: () => ++seq, attachment, ink: opts.ink,
+        meta: (id, st, version = 24, att = null) => [
+          [1, "s", id], [2, "s", st], ...(att ? [[4, "s", att]] : []),
+          [8, "v", device], [9, "v", ++seq], [14, "v", 5381], [16, "v", version],
+        ],
+      };
+      for (const it of page.items || []) records.push(...buildItem(it, ctx));
+
+      // Seiten-Eigenschaften (jede ist ein eigenes Ereignis)
+      const pageEvent = (kind, body, versionField = 15) => {
+        body.push([10, "d", time()], [11, "s", uuid()], [13, "v", device], [14, "v", tick()], [versionField, "v", 24]);
+        events.push([[1, "s", pageId], [kind, "s", body]]);
+        return body;
+      };
+      if (page.bookmark) {
+        pageEvent(57, [[1, "s", docId], [2, "s", pageId], [3, "s", [[1, "v", 1], [2, "s", stamp()]]]]);
+      }
+      if (page.rotation) {
+        const q = ((Math.round(page.rotation / 90) % 4) + 4) % 4;
+        pageEvent(63, [[1, "s", docId], [2, "s", pageId], [3, "s", [...(q ? [[1, "v", q]] : []), [2, "s", stamp()]]]], 16);
+      }
+      if (page.outline) {
+        outlineKey = keyAfter(outlineKey);
+        const body = pageEvent(65, [
+          [1, "s", pageId], [2, "s", uuid()],
+          [3, "s", [[2, "s", stamp(0)]]],
+          [4, "s", [[1, "s", outlineKey], [2, "s", stamp(0)]]],
+          [5, "s", [[1, "s", String(page.outline)], [2, "s", stamp(0)]]],
+          [6, "s", [[2, "s", stamp(0)]]],
+          [15, "s", [[1, "s", ""], [2, "s", stamp(0)]]],
+          [17, "s", docId],
+        ], 16);
+        body[body.length - 1] = [16, "v", 26]; // Inhaltsverzeichnis-Einträge tragen 26 statt 24
+      }
+
       notesIndex.push([[1, "s", notesId], [2, "s", `notes/${notesId}`]]);
       files.push([`notes/${notesId}`, delimited(records)]);
     }

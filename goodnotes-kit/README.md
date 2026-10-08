@@ -56,6 +56,47 @@ const blob = await G.buildDocument([
 ], { title: "Skizze" });
 ```
 
+### Alle Goodnotes-Elemente
+
+Neben `strokes` kann jede Seite eine Liste `items` haben. Sie werden in dieser Reihenfolge übereinander gelegt.
+Koordinaten und Größen sind, wie bei den Strichen, im Koordinatensystem `sizePx` der Seite.
+
+```js
+await G.buildDocument([{
+  sizePt: [595.28, 841.89],             // A4; ohne sizePx sind die Koordinaten in pt
+  bookmark: true,                       // Lesezeichen
+  rotation: 90,                         // Seite drehen (90, 180, 270)
+  outline: "Kapitel 1",                 // Eintrag im Inhaltsverzeichnis
+  items: [
+    { type: "text", x: 40, y: 30, w: 500, h: 40, text: "Hallo", size: 20, font: "Helvetica Neue", color: "#1d3a8a", bold: true },
+    { type: "text", x: 40, y: 80, w: 500, h: 30, text: [                         // mehrere Formatierungen
+        { text: "fett ", bold: true }, { text: "kursiv ", italic: true },
+        { text: "Link", link: "https://example.com", color: "#1565c0" },
+        { text: " → Seite 2", link: { page: 1 } } ] },                              // Link auf eine Seite (Index)
+    { type: "shape", shape: "rect", x: 40, y: 130, w: 120, h: 80, radius: 12,          // rect | ellipse | polygon
+      fill: "#dbe9ff", outline: { width: 2, color: "#1d3a8a", dash: "dashed" }, text: "Form mit Text" },
+    { type: "shape", shape: "polygon", vertices: [[0.5, 0], [1, 1], [0, 1]], x: 200, y: 130, w: 80, h: 80, fill: "#fff3b0" },
+    { type: "stroke", pts: [[40, 250], [200, 260]], w: 2, color: "#000" },               // Kugelschreiber
+    { type: "highlighter", pts: [[40, 280], [300, 280]], w: 16, color: [1, 0.85, 0, 0.45] },
+    { type: "pencil", pts: [[40, 310], [300, 330]], w: 2.5 },                            // Bleistift
+    { type: "shapeStroke", shape: "rect", center: [100, 380], size: [120, 60] },         // Form-Werkzeug
+    { type: "shapeStroke", shape: "ellipse", center: [260, 380], radii: [60, 30] },
+    { type: "shapeStroke", shape: "polyline", points: [[340, 410], [380, 350], [420, 410]] },
+    { type: "line", from: [40, 460], to: [250, 460], endArrow: "open" },                  // Linie mit Pfeil
+    { type: "line", from: [280, 480], via: [360, 430], to: [440, 480], startArrow: "filled", endArrow: "filled", dash: "dotted" },
+    { type: "line", from: [460, 440], to: [550, 500], elbow: true },                      // Winkelverbinder
+    { type: "sticky", x: 40, y: 520, w: 160, h: 120, text: "Haftnotiz", color: [0.98, 0.906, 0.471, 1] },
+    { type: "image", data: pngOderJpegBytes, x: 260, y: 530, w: 100, h: 100, angle: 0.4 },
+  ],
+}]);
+```
+
+Geprüft wurde Folgendes:
+- **Aufbau:** Jede Elementart wurde Feld für Feld mit der Referenz-Bibliothek goodnotes-codec verglichen. Die Abweichungen sind nur gewollt (laufende Nummern, Zähler wie in echten Dateien, ausdrückliche Schriftgröße).
+- **Bereits in Goodnotes geprüft:** Laut goodnotes-codec sind das Kugelschreiber, Textmarker, Formen, Textfelder, Haftnotizen, Linien und Bilder.
+- **Noch nicht in Goodnotes geprüft:** Bleistift, Form-Werkzeug, gestrichelte Linien, gefüllte Pfeile, Links, Lesezeichen, Drehung und Inhaltsverzeichnis.
+- **Nicht eingebaut:** Füller und Pinsel mit variabler Breite, weil Goodnotes beim Import abstürzt. Klebeband, Audioaufnahmen und Mathe-Umwandlung fehlen ebenfalls.
+
 ### Canvas-Text in Striche umwandeln
 
 ```js
@@ -90,7 +131,7 @@ if (navigator.canShare && navigator.canShare({ files: [file] })) {
 
 | Funktion | Zweck |
 |---|---|
-| `buildDocument(pages, opts)` | Baut die `.goodnotes`-Datei (Blob). `pages[i]`: `{ strokes, sizePt, sizePx, background }`. `opts`: `{ title, ink, thumbnail, language, pagePt, pagePx, background }` |
+| `buildDocument(pages, opts)` | Baut die `.goodnotes`-Datei (Blob). `pages[i]`: `{ strokes, items, sizePt, sizePx, background, bookmark, rotation, outline }`. `opts`: `{ title, ink, thumbnail, language, pagePt, pagePx, background }` |
 | `fromImages(images, opts)` | Bilder → Blob; `opts.editable` macht Schrift zu Strichen |
 | `fromImagesPages(images, opts)` | wie `fromImages`, liefert aber nur die Seiten (zum Mischen mit PDF-Seiten) |
 | `fromPdf(pdfBytes, pageSizes, opts, renderPage?)` | PDF → Blob (mit `opts.editable` und `renderPage(i) → Canvas` auch mit Strichen) |
