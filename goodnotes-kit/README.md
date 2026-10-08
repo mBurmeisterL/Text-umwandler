@@ -91,6 +91,11 @@ await G.buildDocument([{
 }]);
 ```
 
+Hinweise:
+- **Reihenfolge:** Goodnotes legt Bilder immer **unter** Formen, Textfelder und Tinte. Die Reihenfolge in `items` gilt
+  nur innerhalb dieser beiden Gruppen. Soll etwas hinter einem Bild liegen, muss es selbst ein Bild sein.
+- **Durchsichtige Bilder:** PNGs mit Transparenz bleiben durchsichtig (z. B. `ctx.clearRect` auf dem Canvas vor `toBlob`).
+
 Geprüft wurde Folgendes:
 - **Aufbau:** Jede Elementart wurde Feld für Feld mit der Referenz-Bibliothek goodnotes-codec verglichen. Die Abweichungen sind nur gewollt (laufende Nummern, Zähler wie in echten Dateien, ausdrückliche Schriftgröße).
 - **Bereits in Goodnotes geprüft:** Laut goodnotes-codec sind das Kugelschreiber, Textmarker, Formen, Textfelder, Haftnotizen, Linien und Bilder.
