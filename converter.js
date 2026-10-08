@@ -38,7 +38,8 @@
     return pdfjsPromise;
   }
 
-  async function renderPdfPage(item, index, longSide = RENDER_LONG_SIDE) {
+  // noText: getippten Text weglassen (er wird als Goodnotes-Textfeld darübergelegt)
+  async function renderPdfPage(item, index, longSide = RENDER_LONG_SIDE, noText = false) {
     const page = await item.pdf.getPage(index + 1);
     const base = page.getViewport({ scale: 1 });
     let scale = longSide / Math.max(base.width, base.height);
@@ -50,8 +51,45 @@
     const ctx = c.getContext("2d");
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, c.width, c.height);
+    if (noText) ctx.fillText = ctx.strokeText = () => {};
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
     return c;
+  }
+
+  /**
+   * Getippter Text einer PDF-Seite als Zeilen (pt, oben links). Die Farbe wird aus der normal gezeichneten Seite
+   * gelesen (dunkelster Punkt im Bereich des Texts). Leere Liste bei eingescannten PDFs ohne Textebene.
+   */
+  async function pdfPageText(item, index, normalCanvas, sizePt) {
+    const page = await item.pdf.getPage(index + 1);
+    const tc = await page.getTextContent();
+    if (!tc.items.some((t) => t.str && t.str.trim())) return [];
+    const k = normalCanvas.width / sizePt[0];
+    const data = normalCanvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, normalCanvas.width, normalCanvas.height).data;
+    const W = normalCanvas.width, H = normalCanvas.height;
+    const colorAt = (x, y, w, h) => {
+      let best = 1e9, col = [30, 27, 27];
+      const x0 = Math.max(0, Math.floor(x * k)), y0 = Math.max(0, Math.floor(y * k));
+      const x1 = Math.min(W - 1, Math.ceil((x + w) * k)), y1 = Math.min(H - 1, Math.ceil((y + h) * k));
+      const step = Math.max(1, Math.floor((x1 - x0) / 200));
+      for (let yy = y0; yy <= y1; yy++) {
+        for (let xx = x0; xx <= x1; xx += step) {
+          const o = (yy * W + xx) * 4;
+          const l = data[o] * 0.299 + data[o + 1] * 0.587 + data[o + 2] * 0.114;
+          if (l < best) { best = l; col = [data[o], data[o + 1], data[o + 2]]; }
+        }
+      }
+      return "#" + col.map((v) => v.toString(16).padStart(2, "0")).join("");
+    };
+    const fontOf = (name) => {
+      try {
+        const f = page.commonObjs.get(name);
+        return f ? { name: f.name, bold: !!(f.bold || f.black), italic: !!f.italic } : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    return window.GoodnotesExport.pdfTextLines(tc, sizePt[1], fontOf, colorAt);
   }
 
   async function pdfPageSizes(item) {
@@ -258,12 +296,13 @@
   async function convertGoodnotes() {
     const G = window.GoodnotesExport;
     const editable = $("cvEditable").checked;
+    const typed = $("cvPdfText").checked;
     const pages = [];
     let thumbnail = null;
     let n = 0;
     const total = items.reduce((a, it) => a + it.pages, 0);
     for (const it of items) {
-      if (it.kind === "pdf" && !editable) {
+      if (it.kind === "pdf" && !editable && !typed) {
         // PDF bleibt unverändert und scharf als Hintergrund
         const sizes = await pdfPageSizes(it);
         sizes.forEach((sizePt, i) => pages.push({ strokes: [], sizePt, background: { pdf: it.bytes, page: i + 1 } }));
@@ -280,12 +319,34 @@
         n++;
         say(editable ? `Seite ${n} von ${total}: Schrift wird in Striche umgewandelt …` : `Seite ${n} von ${total} …`, "busy");
         await new Promise((r) => setTimeout(r, 30));
-        const canvas = it.kind === "pdf" ? await renderPdfPage(it, i) : imageCanvas(await loadImage(it.file), "#fff");
         // PDF-Seiten behalten ihre echte Größe, Bilder werden auf A4-Breite gesetzt
         const sizesPt = it.kind === "pdf" ? [(it.sizes || (it.sizes = await pdfPageSizes(it)))[i]] : null;
+        let canvas, textBoxes = [];
+        if (it.kind === "pdf" && typed) {
+          // Getippter Text → Textfelder; der Hintergrund wird ohne diesen Text gezeichnet
+          const normal = await renderPdfPage(it, i);
+          const lines = await pdfPageText(it, i, normal, sizesPt[0]);
+          if (lines.length) {
+            textBoxes = G.textBoxesFromLines(lines);
+            free(normal);
+            canvas = await renderPdfPage(it, i, RENDER_LONG_SIDE, true);
+          } else {
+            canvas = normal; // eingescannt: kein Text zum Übernehmen
+          }
+        } else {
+          canvas = it.kind === "pdf" ? await renderPdfPage(it, i) : imageCanvas(await loadImage(it.file), "#fff");
+        }
         if (!thumbnail) thumbnail = await smallJpeg(canvas);
-        const [page] = await G.fromImagesPages([canvas], { editable, contrast: contrastValue(), sizesPt });
+        const [page] = await G.fromImagesPages([canvas], { editable, contrast: contrastValue(), sizesPt, quality: 0.9 });
         free(canvas);
+        // Textfelder sind in pt, die Seite rechnet in Bildpixeln (sizePx)
+        if (textBoxes.length) {
+          const f = page.sizePx[0] / page.sizePt[0];
+          page.items = textBoxes.map((b) => ({
+            ...b, x: b.x * f, y: b.y * f, w: b.w * f, h: b.h * f, size: b.size * f,
+            text: b.text.map((r) => ({ ...r, size: r.size * f })),
+          }));
+        }
         pages.push(page);
       }
     }
@@ -342,6 +403,18 @@
 
   const hex = (c) => "#" + c.slice(0, 3).map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
 
+  // Textzeilen → Textfelder des Editors: ein Feld je Zeile, gemischte Formatierung als runs
+  function editorTextItems(lines) {
+    return window.GoodnotesExport.textBoxesFromLines(lines).map((b) => {
+      const r0 = b.text[0];
+      return {
+        type: "text", x: b.x, y: b.y, w: b.w, h: b.h,
+        text: b.text.map((r) => r.text).join(""), runs: b.text.length > 1 ? b.text : undefined,
+        size: Math.round(r0.size * 10) / 10, font: r0.font, color: r0.color || "#1e1b1b", bold: r0.bold, italic: r0.italic,
+      };
+    });
+  }
+
   // Jede Seite/jedes Bild wird eine Editor-Seite mit dem Bild als Hintergrund; mit „Schrift bearbeitbar
   // machen“ wird die Tinte zu Strichen und der Hintergrund von ihr befreit
   async function toEditor() {
@@ -360,7 +433,20 @@
           n++;
           say(`Seite ${n} von ${total} wird übernommen …`, "busy");
           await new Promise((r) => setTimeout(r, 30));
-          let canvas = it.kind === "pdf" ? await renderPdfPage(it, i, 1800) : imageCanvas(await loadImage(it.file), "#fff");
+          // Getippter Text aus PDFs → Textfelder im Editor; der Hintergrund dann ohne diesen Text
+          let textItems = [];
+          let canvas;
+          if (it.kind === "pdf" && $("cvPdfText").checked) {
+            const normal = await renderPdfPage(it, i, 1800);
+            const lines = await pdfPageText(it, i, normal, sizes[i]);
+            if (lines.length) {
+              textItems = editorTextItems(lines);
+              free(normal);
+              canvas = await renderPdfPage(it, i, 1800, true);
+            } else canvas = normal;
+          } else {
+            canvas = it.kind === "pdf" ? await renderPdfPage(it, i, 1800) : imageCanvas(await loadImage(it.file), "#fff");
+          }
           // Hintergrund nicht größer als nötig (Speicher im Browser)
           const f = Math.min(1, 1800 / Math.max(canvas.width, canvas.height));
           if (f < 1) {
@@ -381,7 +467,7 @@
             bgCanvas = r.cleaned;
             strokes = r.strokes.map((st) => ({ type: "stroke", pts: st.pts.map(([x, y]) => [x * k, y * k]), w: st.w * k, color: hex(st.color) }));
           }
-          pages.push({ sizePt, bg: bgCanvas.toDataURL("image/jpeg", 0.85), bgW: bgCanvas.width, bgH: bgCanvas.height, items: strokes });
+          pages.push({ sizePt, bg: bgCanvas.toDataURL("image/jpeg", 0.85), bgW: bgCanvas.width, bgH: bgCanvas.height, items: [...strokes, ...textItems] });
           if (bgCanvas !== canvas) free(bgCanvas);
           free(canvas);
         }

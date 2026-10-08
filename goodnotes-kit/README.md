@@ -142,6 +142,8 @@ if (navigator.canShare && navigator.canShare({ files: [file] })) {
 | `fromPdf(pdfBytes, pageSizes, opts, renderPage?)` | PDF → Blob (mit `opts.editable` und `renderPage(i) → Canvas` auch mit Strichen) |
 | `strokesFromCanvas(canvas, opts)` | Tinte im Bild finden → `{ strokes, cleaned }`. `cleaned` ist das Bild ohne Tinte: Papierfarbe und Papierlinien (liniert, kariert, Randlinie) werden passend zur Schräglage des Fotos durchgezogen, damit nach dem Radieren keine Spuren bleiben |
 | `createRecorder()` / `strokesFromOps(ops)` | Canvas-Zeichenbefehle aufzeichnen → Striche |
+| `pdfTextLines(textContent, pageHeightPt, fontOf?, colorAt?)` | Getippter Text einer PDF-Seite (PDF.js `getTextContent`) → Zeilen mit Formatierung |
+| `textBoxesFromLines(lines)` | Zeilen → Textfelder für `page.items` (Position, Größe, Schrift, fett/kursiv, Farbe) |
 | `vectorize(alpha, w, h)` | Alpha-Maske → Mittellinien-Striche |
 | `makePdf(pages)` | kleines PDF aus JPEGs (`{ wPt, hPt, jpeg, imgW, imgH }`) oder leeren Seiten |
 | `canvasToJpeg(canvas, q)` | Canvas → JPEG-Bytes |

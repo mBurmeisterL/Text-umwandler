@@ -357,6 +357,10 @@
         </div>
         <div id="cvGnOptions" class="cv-options" hidden>
           <label class="check">
+            <input type="checkbox" id="cvPdfText" checked>
+            <span><strong>Getippten Text bearbeitbar machen</strong><br><small class="muted">Für PDFs mit getipptem Text: jede Textzeile wird ein Goodnotes-Textfeld (antippen und ändern), an derselben Stelle, in Größe, Farbe, fett/kursiv. Eingescannte PDFs bleiben wie sie sind.</small></span>
+          </label>
+          <label class="check">
             <input type="checkbox" id="cvEditable">
             <span><strong>Schrift bearbeitbar machen</strong><br><small class="muted">Für Fotos/Scans von Handschrift oder Zeichnungen: dunkle Tinte wird zu Goodnotes-Strichen (radierbar, mit dem Lasso verschiebbar). Ohne Haken bleiben Bilder/PDFs als Seiten, auf die du schreiben kannst.</small></span>
           </label>
@@ -606,11 +610,11 @@
   <script src="dictate.js?v=15" defer></script>
   <script src="synth.js?v=13" defer></script>
   <script src="share.js?v=1" defer></script>
-  <script src="goodnotes-kit/goodnotes.js?v=4" defer></script>
+  <script src="goodnotes-kit/goodnotes.js?v=5" defer></script>
   <script src="app.js?v=18" defer></script>
   <script src="translate.js?v=15" defer></script>
-  <script src="converter.js?v=3" defer></script>
-  <script src="designer.js?v=3" defer></script>
+  <script src="converter.js?v=4" defer></script>
+  <script src="designer.js?v=4" defer></script>
   <script src="router.js?v=18" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
