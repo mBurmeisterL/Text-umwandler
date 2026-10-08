@@ -88,7 +88,7 @@
 
   document.getElementById("allBtn").addEventListener("click", async () => {
     const c = document.createElement("canvas"); c.width = c.height = 40;
-    const x = c.getContext("2d"); x.fillStyle = "#d33"; x.fillRect(0, 0, 40, 40); x.fillStyle = "#fff"; x.fillRect(10, 10, 20, 20);
+    const x = c.getContext("2d"); x.fillStyle = "#d33"; x.fillRect(0, 0, 40, 40); x.clearRect(10, 10, 20, 20); // Mitte durchsichtig
     const png = new Uint8Array(await (await new Promise((r) => c.toBlob(r, "image/png"))).arrayBuffer());
     const items = [
       { type: "text", x: 40, y: 30, w: 515, h: 40, text: [{ text: "Alle Elemente: ", size: 22, bold: true, color: "#1d3a8a" }, { text: "Text, Formen, Pfeile", size: 22, italic: true }] },
