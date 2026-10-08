@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Umwandler">
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=18">
   <script>
     // Fehler sichtbar machen, statt dass Buttons still nicht reagieren
     window.addEventListener("error", function (e) {
@@ -39,6 +39,7 @@
       <a href="#/handschrift" data-view="handschrift"><span aria-hidden="true">✍️</span><span class="nav-label">Handschrift</span></a>
       <a href="#/uebersetzen" data-view="uebersetzen"><span aria-hidden="true">🌍</span><span class="nav-label">Übersetzen</span></a>
       <a href="#/umwandeln" data-view="umwandeln"><span aria-hidden="true">🔄</span><span class="nav-label">Umwandeln</span></a>
+      <a href="#/goodnotes" data-view="goodnotes"><span aria-hidden="true">📒</span><span class="nav-label">Goodnotes</span></a>
       <button type="button" id="openSettings" class="nav-settings" title="KI-Einstellungen" aria-label="KI-Einstellungen">⚙️</button>
     </nav>
   </header>
@@ -73,6 +74,12 @@
         <span class="home-icon" aria-hidden="true">🔄</span>
         <span class="home-title">Datei-Umwandler</span>
         <span class="home-text">Bilder in PDF, PDF in Bilder, JPG ↔ PNG ↔ WebP – und Bilder oder PDFs als Goodnotes-Datei, auf Wunsch mit bearbeitbarer Schrift.</span>
+        <span class="home-go">Öffnen →</span>
+      </a>
+      <a class="home-card" href="#/goodnotes">
+        <span class="home-icon" aria-hidden="true">📒</span>
+        <span class="home-title">Goodnotes-Seite</span>
+        <span class="home-text">Seiten gestalten wie in Goodnotes: Textfelder, Formen, Haftnotizen, Pfeile, Bilder, Stift und Textmarker – alles bleibt in Goodnotes bearbeitbar.</span>
         <span class="home-go">Öffnen →</span>
       </a>
     </div>
@@ -371,6 +378,78 @@
     </div>
   </main>
 
+  <main id="view-goodnotes" class="view designer" hidden>
+    <section class="tr-head">
+      <h2>📒 Goodnotes-Seite</h2>
+      <p>Elemente hinzufügen, antippen zum Bearbeiten, ziehen zum Verschieben. Am Ende als Goodnotes-Datei senden – dort bleibt alles bearbeitbar.</p>
+    </section>
+
+    <div class="gd-toolbar card" role="toolbar" aria-label="Werkzeuge">
+      <div class="gd-group" id="gdTools">
+        <button type="button" class="gd-tool active" data-tool="select" title="Auswählen und verschieben">👆 <span>Auswählen</span></button>
+        <button type="button" class="gd-tool" data-tool="pen" title="Kugelschreiber">🖊️ <span>Stift</span></button>
+        <button type="button" class="gd-tool" data-tool="highlighter" title="Textmarker">🖍️ <span>Textmarker</span></button>
+        <button type="button" class="gd-tool" data-tool="pencil" title="Bleistift">✏️ <span>Bleistift</span></button>
+        <button type="button" class="gd-tool" data-tool="eraser" title="Element antippen zum Löschen">🧽 <span>Radierer</span></button>
+      </div>
+      <div class="gd-group">
+        <label class="gd-color" title="Stiftfarbe"><input type="color" id="gdPenColor" value="#1d3a8a"></label>
+        <select id="gdPenWidth" title="Strichstärke" aria-label="Strichstärke">
+          <option value="1">fein</option><option value="2" selected>mittel</option><option value="4">dick</option>
+        </select>
+      </div>
+      <div class="gd-group" id="gdAdd">
+        <button type="button" class="btn ghost" data-add="text">🔤 <span>Text</span></button>
+        <button type="button" class="btn ghost" data-add="rect">▭ <span>Rechteck</span></button>
+        <button type="button" class="btn ghost" data-add="ellipse">◯ <span>Ellipse</span></button>
+        <button type="button" class="btn ghost" data-add="triangle">△ <span>Dreieck</span></button>
+        <button type="button" class="btn ghost" data-add="line">➝ <span>Pfeil</span></button>
+        <button type="button" class="btn ghost" data-add="sticky">🟨 <span>Haftnotiz</span></button>
+        <label class="btn ghost file-btn">🖼️ <span>Bild</span><input type="file" id="gdImage" accept="image/*" multiple></label>
+      </div>
+    </div>
+
+    <div class="gd-layout">
+      <aside class="gd-pages card" aria-label="Seiten">
+        <h3 class="card-title">Seiten</h3>
+        <ol class="gd-pagelist" id="gdPageList"></ol>
+        <div class="gd-pagebtns">
+          <button type="button" class="btn ghost" id="gdAddPage">＋ <span>Seite</span></button>
+          <button type="button" class="btn ghost" id="gdDelPage" title="Seite löschen">🗑️</button>
+        </div>
+        <label class="field"><span>Papier</span>
+          <select id="gdPaper">
+            <option value="blank">Blanko</option><option value="lined">Liniert</option>
+            <option value="grid">Kariert</option><option value="dotted">Punktiert</option>
+          </select>
+        </label>
+        <label class="field"><span>Format</span>
+          <select id="gdFormat"><option value="portrait">A4 hoch</option><option value="landscape">A4 quer</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="gdBookmark"><span>Lesezeichen</span></label>
+        <label class="field"><span>Eintrag im Inhaltsverzeichnis</span>
+          <input type="text" id="gdOutline" class="gd-input" placeholder="z. B. Kapitel 1 (leer = keiner)">
+        </label>
+      </aside>
+
+      <section class="gd-stage" aria-label="Seite">
+        <div class="gd-paper" id="gdPaperWrap"><svg id="gdSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      </section>
+
+      <aside class="gd-props card" aria-label="Eigenschaften">
+        <h3 class="card-title" id="gdPropsTitle">Eigenschaften</h3>
+        <div id="gdProps"><p class="muted">Ein Element antippen, um es zu bearbeiten.</p></div>
+      </aside>
+    </div>
+
+    <div class="gd-actions">
+      <label class="field gd-title"><span>Name der Datei</span><input type="text" id="gdTitle" class="gd-input" value="Meine Seite"></label>
+      <button type="button" class="btn ghost" id="gdClear">🗑️ <span>Alles leeren</span></button>
+      <button type="button" class="btn primary" id="gdExport">📤 An Goodnotes senden</button>
+    </div>
+    <p class="tr-status" id="gdStatus" role="status"></p>
+  </main>
+
   <div id="settingsDialog" class="hw-overlay" hidden>
     <div class="hw settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <header class="hw-head">
@@ -528,7 +607,8 @@
   <script src="app.js?v=18" defer></script>
   <script src="translate.js?v=15" defer></script>
   <script src="converter.js?v=2" defer></script>
-  <script src="router.js?v=16" defer></script>
+  <script src="designer.js?v=2" defer></script>
+  <script src="router.js?v=17" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });

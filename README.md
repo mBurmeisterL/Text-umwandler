@@ -4,7 +4,7 @@ Eine kleine Webseite, die getippten Text in realistisch wirkende Handschrift ver
 
 ## Aufbau
 
-Die Startseite ist ein **Hauptmenü** mit drei Bereichen (oben jederzeit über die Leiste erreichbar):
+Die Startseite ist ein **Hauptmenü** mit vier Bereichen (oben jederzeit über die Leiste erreichbar):
 
 - **✍️ Handschrift** (`#/handschrift`) – der Handschrift-Umwandler (siehe unten)
 - **🌍 Übersetzen** (`#/uebersetzen`) – Text eintippen oder ein Foto/Bild hochladen; die KI liest den
@@ -14,6 +14,13 @@ Die Startseite ist ein **Hauptmenü** mit drei Bereichen (oben jederzeit über d
 - **🔄 Umwandeln** (`#/umwandeln`) – Bilder und PDFs umwandeln: Bilder → PDF, PDF → Bilder, JPG ↔ PNG ↔ WebP und
   Bilder/PDFs → Goodnotes. Mit „Schrift bearbeitbar machen“ wird dunkle Tinte auf Fotos/Scans (z. B. Handschrift)
   zu Goodnotes-Strichen, die sich radieren und verschieben lassen. Alles läuft nur im Browser.
+
+- **📒 Goodnotes-Seite** (`#/goodnotes`): Seiten gestalten wie in Goodnotes. Es gibt Textfelder (Schrift, Größe,
+  Farbe, fett/kursiv, Links auch auf andere Seiten), Formen (Rechteck, Ellipse, Dreieck, mit Füllung, Rand und
+  Strichelung), Haftnotizen, Linien und Pfeile (gerade, gebogen, gewinkelt), Bilder (drehbar, PNG mit Transparenz),
+  sowie Stift, Textmarker, Bleistift und Radierer zum direkten Schreiben. Pro Seite lassen sich Papier (blanko,
+  liniert, kariert, punktiert), Hoch-/Querformat, Lesezeichen und ein Eintrag im Inhaltsverzeichnis einstellen.
+  Alles wird im Browser gespeichert und als `.goodnotes`-Datei gesendet; in Goodnotes bleibt alles bearbeitbar.
 
 Die **⚙️ KI-Einstellungen** (oben rechts) gelten für alle Bereiche.
 
