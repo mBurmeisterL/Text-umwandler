@@ -661,6 +661,74 @@
     els.status.textContent = "Dieser Browser kann nicht direkt teilen – das PDF wurde heruntergeladen. In Goodnotes über „Importieren“ öffnen.";
   }
 
+  // ---------- Goodnotes-Datei (bearbeitbare Striche) ----------
+
+  async function buildGoodnotes() {
+    const G = window.GoodnotesExport;
+    if (!lastRender || !G) return null;
+    const { s, lines, linesPerPage } = lastRender;
+    // Neuer Zeichen-Lieferant, damit dieselben Buchstaben-Varianten wie in der Vorschau gewählt werden
+    const pv = makeProvider(document.createElement("canvas").getContext("2d"), s);
+    const pageCount = Math.max(1, Math.ceil(lines.length / linesPerPage));
+    const pages = [];
+    for (let p = 0; p < pageCount; p++) {
+      const rec = G.createRecorder();
+      rec.font = lastRender.font;
+      rec.fillStyle = s.ink;
+      lines.slice(p * linesPerPage, (p + 1) * linesPerPage).forEach((words, i) => {
+        const baseY = MARGIN_TOP + s.line * (i + 1) - Math.max(2, s.size * 0.06);
+        drawLine(rec, pv, words, baseY, s, rngFor(state.seed, p, i));
+      });
+      pages.push({ strokes: G.strokesFromOps(rec.ops) });
+      // Dem Browser zwischendurch Luft lassen
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    // Papier ohne Schrift als PDF-Hintergrund
+    const paper = document.createElement("canvas");
+    paper.width = PAGE_W;
+    paper.height = PAGE_H;
+    drawPaper(paper.getContext("2d"), s, linesPerPage);
+    const pdf = new window.jspdf.jsPDF({ orientation: "p", unit: "pt", format: "a4" });
+    pdf.addImage(paper.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, 595.28, 841.89);
+    const background = new Uint8Array(pdf.output("arraybuffer"));
+    // Vorschaubild der ersten Seite
+    const first = canvases()[0];
+    const t = document.createElement("canvas");
+    t.width = 300;
+    t.height = Math.round(300 * PAGE_H / PAGE_W);
+    t.getContext("2d").drawImage(first, 0, 0, t.width, t.height);
+    const thumbnail = new Uint8Array(await (await new Promise((r) => t.toBlob(r, "image/jpeg", 0.8))).arrayBuffer());
+    return G.buildDocument(pages, {
+      pagePx: [PAGE_W, PAGE_H],
+      pagePt: [595.28, 841.89],
+      ink: s.ink,
+      background,
+      thumbnail,
+      title: "Handschrift",
+    });
+  }
+
+  async function exportGoodnotes() {
+    if (!lastRender || !els.text.value.trim()) { els.status.textContent = "Es gibt noch keinen Text."; return; }
+    if (!window.jspdf || !window.GoodnotesExport) {
+      els.status.textContent = "Goodnotes-Export konnte nicht geladen werden – bitte Seite neu laden.";
+      return;
+    }
+    els.status.textContent = "Goodnotes-Datei wird erstellt …";
+    let blob;
+    try {
+      blob = await buildGoodnotes();
+    } catch (e) {
+      els.status.textContent = "Goodnotes-Datei konnte nicht erstellt werden: " + (e && e.message ? e.message : e);
+      return;
+    }
+    const file = new File([blob], "handschrift.goodnotes", { type: "application/octet-stream" });
+    const shared = await shareOrDownload([file]);
+    els.status.textContent = shared
+      ? "In Goodnotes öffnen – die Schrift ist dort radierbar und mit dem Lasso verschiebbar."
+      : "„handschrift.goodnotes“ heruntergeladen – in Goodnotes über „Importieren“ öffnen.";
+  }
+
   // ---------- KI-Helfer ----------
 
   function initAi() {
@@ -966,6 +1034,7 @@
     $("pdf").addEventListener("click", exportPdf);
     $("print").addEventListener("click", () => window.print());
     $("share").addEventListener("click", sharePdf);
+    $("goodnotes").addEventListener("click", exportGoodnotes);
     $("openEditor").addEventListener("click", () => window.Handschrift.open());
     window.Handschrift.onClose(() => {
       if (window.Handschrift.count() && els.font.value !== CUSTOM) {

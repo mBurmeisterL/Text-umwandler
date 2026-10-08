@@ -34,6 +34,13 @@ eigene Handschrift über **Sichern/Laden** übertragen und die KI-Einstellungen 
 - Automatischer Seitenumbruch (A4)
 - Export als PNG (pro Seite) oder PDF, oder direkt drucken
 - „Teilen“ öffnet auf iPad/iPhone das Teilen-Menü, z. B. um das PDF direkt in Goodnotes zu öffnen
+- **✏️ Goodnotes (bearbeitbar):** erzeugt eine echte Goodnotes-Datei (`handschrift.goodnotes`). Die Schrift
+  besteht darin aus Kugelschreiber-Strichen, die sich in Goodnotes radieren, mit dem Lasso verschieben,
+  umfärben und vergrößern lassen; das Papier liegt als Hintergrund darunter. Auf dem iPad über das
+  Teilen-Menü an Goodnotes geben (oder in „Dateien“ sichern und dort antippen). Schriftarten werden dafür in
+  Mittellinien umgerechnet; Schreibschrift mit dick/dünn-Wechsel (Dancing Script) wird dabei etwas
+  gleichmäßiger. Das Goodnotes-Format ist nicht offiziell dokumentiert (Aufbau nach
+  [goodnotes-codec](https://github.com/Taylor-Nilsen/goodnotes-codec)).
 - **✂️ Ohne Papier:** nur die Schrift als transparentes Bild – kopieren und in Goodnotes einsetzen,
   als Bild teilen/sichern oder jeden Absatz als eigenes Bild (in Goodnotes frei verschiebbar)
 - **Mehrere Handschriften** (z. B. eigene und „Mama“): im Handschrift-Fenster anlegen, umbenennen,
