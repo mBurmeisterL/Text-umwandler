@@ -96,6 +96,8 @@
     return c;
   }
 
+  // Canvas-Speicher sofort freigeben (Safari hat ein festes Limit)
+  const free = (c) => { c.width = c.height = 0; };
   const baseName = (name) => name.replace(/\.[^.]+$/, "") || "datei";
   const toBlob = (c, type, q) => new Promise((res) => c.toBlob(res, type, q));
 
@@ -128,7 +130,9 @@
           // PDF.js bekommt eine Kopie, die Original-Bytes brauchen wir für Goodnotes
           const pdf = await pdfjs.getDocument({ data: bytes.slice() }).promise;
           const item = { name: file.name, kind: "pdf", file, bytes, pdf, pages: pdf.numPages };
-          item.thumb = (await renderPdfPage(item, 0, 240)).toDataURL("image/jpeg", 0.7);
+          const t = await renderPdfPage(item, 0, 240);
+          item.thumb = t.toDataURL("image/jpeg", 0.7);
+          free(t);
           items.push(item);
         } else {
           const im = await loadImage(file);
@@ -138,6 +142,7 @@
           t.height = Math.max(1, Math.round(im.naturalHeight * f));
           t.getContext("2d").drawImage(im, 0, 0, t.width, t.height);
           items.push({ name: file.name, kind: "image", file, pages: 1, thumb: t.toDataURL("image/png") });
+          free(t);
         }
       } catch (_) {
         failed++;
@@ -203,15 +208,17 @@
     for await (const { canvas } of allCanvases("#fff")) {
       say(`Seite ${pages.length + 1} wird eingefügt …`, "busy");
       const jpeg = await window.GoodnotesExport.canvasToJpeg(canvas, 0.9);
+      const imgW = canvas.width, imgH = canvas.height;
+      free(canvas);
       let wPt, hPt;
       if (a4) {
-        [wPt, hPt] = canvas.width > canvas.height ? [841.89, 595.28] : [595.28, 841.89];
+        [wPt, hPt] = imgW > imgH ? [841.89, 595.28] : [595.28, 841.89];
       } else {
         // 150 dpi: Bildgröße in pt
-        wPt = (canvas.width / 150) * 72;
-        hPt = (canvas.height / 150) * 72;
+        wPt = (imgW / 150) * 72;
+        hPt = (imgH / 150) * 72;
       }
-      pages.push({ wPt, hPt, jpeg, imgW: canvas.width, imgH: canvas.height });
+      pages.push({ wPt, hPt, jpeg, imgW, imgH });
     }
     const bytes = a4 ? fittedPdf(pages) : window.GoodnotesExport.makePdf(pages);
     const name = items.length === 1 ? baseName(items[0].name) : "umgewandelt";
@@ -240,6 +247,7 @@
     for await (const { canvas, name } of allCanvases(keepAlpha ? null : "#fff")) {
       say(`Bild ${files.length + 1} wird umgewandelt …`, "busy");
       const blob = await toBlob(canvas, type, 0.9);
+      free(canvas);
       if (!blob || blob.type !== type) throw new Error(`Dieser Browser kann kein ${ext.toUpperCase()} speichern.`);
       files.push(new File([blob], `${name}.${ext}`, { type }));
     }
@@ -259,7 +267,11 @@
         const sizes = await pdfPageSizes(it);
         sizes.forEach((sizePt, i) => pages.push({ strokes: [], sizePt, background: { pdf: it.bytes, page: i + 1 } }));
         n += it.pages;
-        if (!thumbnail) thumbnail = await G.canvasToJpeg(await renderPdfPage(it, 0, 400), 0.7);
+        if (!thumbnail) {
+          const t = await renderPdfPage(it, 0, 400);
+          thumbnail = await smallJpeg(t);
+          free(t);
+        }
         continue;
       }
       const count = it.kind === "pdf" ? it.pages : 1;
@@ -269,17 +281,28 @@
         await new Promise((r) => setTimeout(r, 30));
         const canvas = it.kind === "pdf" ? await renderPdfPage(it, i) : imageCanvas(await loadImage(it.file), "#fff");
         // PDF-Seiten behalten ihre echte Größe, Bilder werden auf A4-Breite gesetzt
-        const sizePt = it.kind === "pdf" ? (await pdfPageSizes(it))[i] : null;
-        const [page] = await G.fromImagesPages([canvas], { editable, contrast: contrastValue() });
-        if (sizePt) page.sizePt = sizePt;
+        const sizesPt = it.kind === "pdf" ? [(it.sizes || (it.sizes = await pdfPageSizes(it)))[i]] : null;
+        if (!thumbnail) thumbnail = await smallJpeg(canvas);
+        const [page] = await G.fromImagesPages([canvas], { editable, contrast: contrastValue(), sizesPt });
+        free(canvas);
         pages.push(page);
-        if (!thumbnail) thumbnail = await G.canvasToJpeg(canvas, 0.6);
       }
     }
     say("Goodnotes-Datei wird zusammengebaut …", "busy");
     const blob = await G.buildDocument(pages, { title: items.length === 1 ? baseName(items[0].name) : "Umgewandelt", thumbnail });
     const name = items.length === 1 ? baseName(items[0].name) : "umgewandelt";
     return [new File([blob], `${name}.goodnotes`, { type: "application/octet-stream" })];
+  }
+
+  // Vorschaubild für Goodnotes (300 px breit)
+  async function smallJpeg(c) {
+    const t = document.createElement("canvas");
+    t.width = 300;
+    t.height = Math.max(1, Math.round((300 * c.height) / c.width));
+    t.getContext("2d").drawImage(c, 0, 0, t.width, t.height);
+    const out = await window.GoodnotesExport.canvasToJpeg(t, 0.7);
+    free(t);
+    return out;
   }
 
   const contrastValue = () => [0.4, 0.28, 0.18][Number($("cvContrast").value)];
@@ -295,40 +318,23 @@
       else if (target === "png") files = await convertImages("image/png", "png");
       else if (target === "webp") files = await convertImages("image/webp", "webp");
       else files = await convertGoodnotes();
-      say("Fertig – wird geteilt bzw. gespeichert …", "busy");
-      const shared = await shareOrDownload(files);
       const what = files.length === 1 ? `„${files[0].name}“` : `${files.length} Dateien`;
-      say(shared
-        ? `✓ ${what} fertig.` + (target === "goodnotes" ? " Im Teilen-Menü „Goodnotes“ wählen." : "")
-        : `✓ ${what} heruntergeladen.` + (target === "goodnotes" ? " In Goodnotes über „Importieren“ öffnen." : ""), "ok");
+      say(`✓ ${what} fertig.`, "ok");
+      const gn = target === "goodnotes";
+      const how = await window.ShareFiles.deliver(files, {
+        title: gn ? "Goodnotes-Datei ist fertig" : "Fertig umgewandelt",
+        shareLabel: gn ? "📤 An Goodnotes senden" : "📤 Teilen",
+        hint: gn
+          ? "Im Teilen-Menü „Goodnotes“ antippen (eventuell unter „Mehr“). Oder „Speichern“ und die Datei in der Dateien-App antippen."
+          : "Im Teilen-Menü z. B. „Bild sichern“, „In Dateien sichern“ oder eine App wählen.",
+      });
+      if (how === "shared") say(`✓ ${what} geteilt.`, "ok");
+      else if (how === "downloaded") say(`✓ ${what} gespeichert.` + (gn ? " In der Dateien-App antippen oder in Goodnotes über „Importieren“ öffnen." : ""), "ok");
     } catch (e) {
       say("Umwandeln ging nicht: " + (e && e.message ? e.message : e), "error");
     } finally {
       btn.disabled = !items.length;
     }
-  }
-
-  async function shareOrDownload(files) {
-    if (navigator.canShare && navigator.canShare({ files })) {
-      try {
-        await navigator.share({ files });
-        return true;
-      } catch (e) {
-        if (e.name === "AbortError") return true;
-      }
-    }
-    for (const f of files) {
-      const url = URL.createObjectURL(f);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = f.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    return false;
   }
 
   // ---------- Oberfläche ----------

@@ -19,6 +19,8 @@ Der fertige, getestete Baustein liegt in `goodnotes-kit/` dieses Repos
    - PDF → `fromPdf(pdfBytes, pageSizes)`
    - Canvas-Text/-Zeichnung → `createRecorder()` + `strokesFromOps(rec.ops)`
 4. Die Datei als `File` mit Endung `.goodnotes` über `navigator.share` (iPad → Goodnotes) oder als Download ausgeben.
+   Safari blockiert `navigator.share()` gut 1 s nach dem Antippen: erst erstellen, dann ein „Senden“-Knopf, der
+   sofort teilt (siehe `share.js` im Repo, `ShareFiles.deliver`).
 
 ## Wichtige Regeln
 

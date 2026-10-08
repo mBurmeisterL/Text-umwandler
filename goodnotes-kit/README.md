@@ -68,6 +68,12 @@ const blob = await G.buildDocument([{ strokes, sizePx: [1240, 1754] }], { ink: "
 
 ### Datei an den Nutzer geben
 
+**Wichtig für iPad/iPhone:** Safari erlaubt `navigator.share()` nur etwa 1 Sekunde nach dem Antippen.
+Dauert das Erstellen der Datei länger, wird das Teilen blockiert und es passiert scheinbar nichts. Deshalb:
+Datei erst erstellen, dann einen Knopf „An Goodnotes senden“ zeigen, der beim Antippen **sofort** (ohne
+`await` davor) `navigator.share()` aufruft. Fertige Lösung: `share.js` im Text-Umwandler
+(`ShareFiles.deliver(files, { title, hint, shareLabel })`). Kurz gefasst:
+
 ```js
 const file = new File([blob], "notizen.goodnotes", { type: "application/octet-stream" });
 if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -88,7 +94,7 @@ if (navigator.canShare && navigator.canShare({ files: [file] })) {
 | `fromImages(images, opts)` | Bilder → Blob; `opts.editable` macht Schrift zu Strichen |
 | `fromImagesPages(images, opts)` | wie `fromImages`, liefert aber nur die Seiten (zum Mischen mit PDF-Seiten) |
 | `fromPdf(pdfBytes, pageSizes, opts, renderPage?)` | PDF → Blob (mit `opts.editable` und `renderPage(i) → Canvas` auch mit Strichen) |
-| `strokesFromCanvas(canvas, opts)` | Tinte im Bild finden → `{ strokes, cleaned }` (`cleaned` = Bild ohne Tinte) |
+| `strokesFromCanvas(canvas, opts)` | Tinte im Bild finden → `{ strokes, cleaned }`. `cleaned` ist das Bild ohne Tinte: Papierfarbe und Papierlinien (liniert, kariert, Randlinie) werden passend zur Schräglage des Fotos durchgezogen, damit nach dem Radieren keine Spuren bleiben |
 | `createRecorder()` / `strokesFromOps(ops)` | Canvas-Zeichenbefehle aufzeichnen → Striche |
 | `vectorize(alpha, w, h)` | Alpha-Maske → Mittellinien-Striche |
 | `makePdf(pages)` | kleines PDF aus JPEGs (`{ wPt, hPt, jpeg, imgW, imgH }`) oder leeren Seiten |

@@ -411,6 +411,8 @@
   // ---------- Aufgezeichnete Zeichen → Striche in Seitenpixeln ----------
 
   const measureCtx = document.createElement("canvas").getContext("2d");
+  let scratchCanvas = null;
+  const scratch = () => scratchCanvas || (scratchCanvas = document.createElement("canvas"));
 
   function localBox(op) {
     if (op.type === "image") return [op.x, op.y, op.x + op.w, op.y + op.h];
@@ -434,10 +436,17 @@
     const bw = Math.ceil(Math.max(...corners.map((p) => p.x))) + 2 - bx;
     const bh = Math.ceil(Math.max(...corners.map((p) => p.y))) + 2 - by;
     if (bw <= 0 || bh <= 0 || bw * bh > 400000) return [];
-    const c = document.createElement("canvas");
-    c.width = bw * SS;
-    c.height = bh * SS;
+    // Ein einziges Zeichenfeld für alle Zeichen: Safari hat ein festes Speicherlimit für Canvas
+    const c = scratch();
+    if (c.width < bw * SS || c.height < bh * SS) {
+      c.width = Math.max(c.width, bw * SS);
+      c.height = Math.max(c.height, bh * SS);
+    }
     const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, bw * SS, bh * SS);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     ctx.setTransform(SS, 0, 0, SS, -bx * SS, -by * SS);
     const m = op.m;
     ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f);
@@ -449,10 +458,11 @@
     } else {
       ctx.drawImage(op.img, op.x, op.y, op.w, op.h);
     }
-    const data = ctx.getImageData(0, 0, c.width, c.height).data;
-    const alpha = new Uint8Array(c.width * c.height);
+    const W = bw * SS, H = bh * SS;
+    const data = ctx.getImageData(0, 0, W, H).data;
+    const alpha = new Uint8Array(W * H);
     for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3];
-    return vectorize(alpha, c.width, c.height).map((s) => ({
+    return vectorize(alpha, W, H).map((s) => ({
       pts: s.pts.map(([x, y]) => [bx + x / SS, by + y / SS]),
       w: s.w / SS,
     }));
@@ -555,6 +565,36 @@
     return concat(parts);
   }
 
+  // Punkte dichter machen (höchstens step Einheiten Abstand), wie bei echten Goodnotes-Strichen – so kann der
+  // Radierer auch Teile eines Strichs entfernen. Abgetastet wird die weiche Kurve, die strokeGeometry aus den
+  // Punkten macht (Punkte als Kontrollpunkte, Mittelpunkte als Kurvenenden), damit nichts eckig wird.
+  function densify(pts, step) {
+    if (pts.length < 2) return pts;
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const out = [pts[0]];
+    const quad = (p0, c, p1) => {
+      const n = Math.max(1, Math.ceil((Math.hypot(c[0] - p0[0], c[1] - p0[1]) + Math.hypot(p1[0] - c[0], p1[1] - c[1])) / step));
+      for (let j = 1; j <= n; j++) {
+        const t = j / n, u = 1 - t;
+        out.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * p1[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p1[1]]);
+      }
+    };
+    if (pts.length === 2) {
+      quad(pts[0], mid(pts[0], pts[1]), pts[1]);
+      return out;
+    }
+    let cur = pts[0];
+    const first = mid(pts[0], pts[1]);
+    quad(cur, mid(cur, first), first);
+    cur = first;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const end = i === pts.length - 2 ? pts[i + 1] : mid(pts[i], pts[i + 1]);
+      quad(cur, pts[i], end);
+      cur = end;
+    }
+    return out;
+  }
+
   // Kugelschreiber-Strich: Schema "vuA(v)A(S(uu))A(S(uuuu))vA(f)"
   const PSTROKE = "vuA(v)A(S(uu))A(S(uuuu))vA(f)";
   function strokeGeometry(pts, thickness) {
@@ -602,7 +642,15 @@
   }
 
   const rnd32 = () => (crypto.getRandomValues(new Uint32Array(1))[0]);
-  const uuid = () => crypto.randomUUID().toUpperCase();
+  const uuid = () => {
+    if (crypto.randomUUID) return crypto.randomUUID().toUpperCase();
+    // Ältere Browser: Version-4-UUID von Hand
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("").toUpperCase();
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  };
   const stamp = (counter = 1) => [[1, "v", counter], [2, "v", rnd32()]];
 
   // „UUID + 1“: die Striche einer Seite liegen in notes/<Seiten-ID + 1>
@@ -762,6 +810,241 @@
 
   // ---------- Schrift aus Fotos/Scans → Striche ----------
 
+  // Papierfarbe je 32er-Block aus den Pixeln außerhalb von hole, ohne dunkle Linien (Pixel nahe beim
+  // Helligkeits-Median), weich interpoliert. Gibt (x, y, Kanal) → Wert zurück.
+  function paperEstimate(px, hole, w, h) {
+    const B = 32, bw = Math.ceil(w / B), bh = Math.ceil(h / B);
+    const est = new Float32Array(bw * bh * 3);
+    const ok = new Uint8Array(bw * bh);
+    const hist = new Uint32Array(256);
+    for (let by = 0; by < bh; by++) {
+      for (let bx = 0; bx < bw; bx++) {
+        hist.fill(0);
+        let n = 0;
+        const y0 = by * B, y1 = Math.min(h, y0 + B), x0 = bx * B, x1 = Math.min(w, x0 + B);
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+          const i = y * w + x;
+          if (hole[i]) continue;
+          hist[Math.round(0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2])]++;
+          n++;
+        }
+        if (n < 40) continue;
+        // Mittel der Pixel um die häufigste Helligkeit (das Papier): Linien fallen heraus, auch wenn
+        // neben der Schrift fast nur Linien übrig sind; Rauschen mittelt sich weg
+        let mode = 255, best = -1;
+        for (let v = 0; v < 256; v++) {
+          let sum = 0;
+          for (let d = -3; d <= 3; d++) sum += hist[Math.min(255, Math.max(0, v + d))];
+          if (sum > best || (sum === best && v > mode)) { best = sum; mode = v; }
+        }
+        if (best < 30) continue;
+        const lo = mode - 6, hi = mode + 6;
+        let r = 0, g = 0, b = 0, c = 0;
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+          const i = y * w + x;
+          if (hole[i]) continue;
+          const l = Math.round(0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]);
+          if (l < lo || l > hi) continue;
+          r += px[i * 4]; g += px[i * 4 + 1]; b += px[i * 4 + 2]; c++;
+        }
+        const o = (by * bw + bx) * 3;
+        est[o] = r / c; est[o + 1] = g / c; est[o + 2] = b / c;
+        ok[by * bw + bx] = 1;
+      }
+    }
+    // Ausreißer (Block deutlich dunkler als seine Nachbarn, meist nur Linienpixel übrig) verwerfen
+    const lumOf = (k) => 0.299 * est[k * 3] + 0.587 * est[k * 3 + 1] + 0.114 * est[k * 3 + 2];
+    const drop = [];
+    for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
+      const k = by * bw + bx;
+      if (!ok[k]) continue;
+      const around = [];
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = bx + dx, yy = by + dy;
+        if ((dx || dy) && xx >= 0 && yy >= 0 && xx < bw && yy < bh && ok[yy * bw + xx]) around.push(lumOf(yy * bw + xx));
+      }
+      if (around.length < 4) continue;
+      around.sort((a, b) => a - b);
+      if (lumOf(k) < around[around.length >> 1] - 5) drop.push(k);
+    }
+    for (const k of drop) ok[k] = 0;
+    // Blöcke ganz unter Schrift: aus den Nachbarn ergänzen
+    for (let round = 0; round < bw + bh; round++) {
+      let missing = 0;
+      const next = ok.slice();
+      for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
+        const k = by * bw + bx;
+        if (ok[k]) continue;
+        let r = 0, g = 0, b = 0, c = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const xx = bx + dx, yy = by + dy;
+          if (xx < 0 || yy < 0 || xx >= bw || yy >= bh || !ok[yy * bw + xx]) continue;
+          const o = (yy * bw + xx) * 3;
+          r += est[o]; g += est[o + 1]; b += est[o + 2]; c++;
+        }
+        if (!c) { missing++; continue; }
+        est[k * 3] = r / c; est[k * 3 + 1] = g / c; est[k * 3 + 2] = b / c;
+        next[k] = 1;
+      }
+      ok.set(next);
+      if (!missing) break;
+    }
+    return (x, y, ch) => {
+      const fx = Math.min(bw - 1, Math.max(0, x / B - 0.5)), fy = Math.min(bh - 1, Math.max(0, y / B - 0.5));
+      const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(bw - 1, x0 + 1), y1 = Math.min(bh - 1, y0 + 1);
+      const tx = fx - x0, ty = fy - y0;
+      const v = (xx, yy) => est[(yy * bw + xx) * 3 + ch];
+      return (v(x0, y0) * (1 - tx) + v(x1, y0) * tx) * (1 - ty) + (v(x0, y1) * (1 - tx) + v(x1, y1) * tx) * ty;
+    };
+  }
+
+  // Lange, gerade Linien (Randlinie, Linien, Kästchen des Papiers) gehören nicht zur Schrift:
+  // Pixel entlang einer geraden Linie über mehr als ein Viertel der Seite aus der Maske nehmen.
+  function removePaperLines(mask, w, h) {
+    const dark = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) dark[i] = mask[i] ? 50 : 0;
+    for (const vertical of [true, false]) {
+      const t = lineSlope(dark, w, h, vertical);
+      const off = vertical ? h : w;
+      const bins = new Uint32Array(w + h + 8);
+      const bin = (x, y) => (vertical ? Math.round(x - y * t) : Math.round(y - x * t)) + off;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x]) bins[bin(x, y)]++;
+      const span = vertical ? h : w;
+      const line = new Uint8Array(bins.length);
+      for (let b = 6; b < bins.length - 6; b++) {
+        if (bins[b] < span * 0.25) continue;
+        // Dünn muss sie sein: wenige Pixel daneben fast leer (eine Schriftzeile ist dort genauso dicht)
+        const side = Math.max(bins[b - 5], bins[b - 6], bins[b + 5], bins[b + 6]);
+        if (bins[b] < 4 * side) continue;
+        line[b] = 1;
+        if (b > 0 && bins[b - 1] > span * 0.08) line[b - 1] = 1;
+        if (b + 1 < bins.length && bins[b + 1] > span * 0.08) line[b + 1] = 1;
+      }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x] && line[bin(x, y)]) mask[y * w + x] = 0;
+    }
+  }
+
+  // Neigung der Papierlinien (liniert/kariert) schätzen: der Winkel, bei dem die Projektion der
+  // „Liniendunkelheit“ am schärfsten ist. vertical=false: waagerechte Linien (y - x·tan), sonst senkrechte.
+  function lineSlope(dark, w, h, vertical) {
+    // Nur die Pixel mit Linienanteil sammeln (jeder 2. Punkt reicht), dann Winkel durchprobieren
+    const xs = [], ys = [], vs = [];
+    for (let y = 0; y < h; y += 2) {
+      for (let x = 0; x < w; x += 2) {
+        const v = dark[y * w + x];
+        if (v >= 3) { xs.push(x); ys.push(y); vs.push(v); }
+      }
+    }
+    const bins = new Float64Array(w + h + 8);
+    const score = (deg) => {
+      const t = Math.tan(deg * Math.PI / 180);
+      bins.fill(0);
+      for (let k = 0; k < xs.length; k++) {
+        const bin = vertical ? Math.round(xs[k] - ys[k] * t) + h : Math.round(ys[k] - xs[k] * t) + w;
+        if (bin >= 0 && bin < bins.length) bins[bin] += vs[k];
+      }
+      let sc = 0;
+      for (let i = 0; i < bins.length; i++) sc += bins[i] * bins[i];
+      return sc;
+    };
+    // grob in 0,1°-Schritten, dann fein um das beste Ergebnis
+    let best = 0, bestScore = -1;
+    for (let a = -40; a <= 40; a++) {
+      const sc = score(a / 10);
+      if (sc > bestScore) { bestScore = sc; best = a / 10; }
+    }
+    const coarse = best;
+    for (let d = -0.08; d <= 0.081; d += 0.02) {
+      const sc = score(coarse + d);
+      if (sc > bestScore) { bestScore = sc; best = coarse + d; }
+    }
+    return Math.tan(best * Math.PI / 180);
+  }
+
+
+  // Füllt die Pixel in hole (0/1): Papierfarbe (ohne Linien) plus die Linien des Papiers, die von beiden
+  // Seiten in die Lücke laufen – entlang der gemessenen Neigung, mit ihrer echten Dicke und Farbe.
+  function fillHoles(px, hole, w, h) {
+    const paper = paperEstimate(px, hole, w, h);
+    const orig = px.slice();
+    // Abweichung jedes sauberen Pixels vom Papier (Linien, Ränder) und ihre Dunkelheit
+    const delta = new Float32Array(w * h * 3);
+    const dark = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (hole[i]) continue;
+        const dr = orig[i * 4] - paper(x, y, 0), dg = orig[i * 4 + 1] - paper(x, y, 1), db = orig[i * 4 + 2] - paper(x, y, 2);
+        delta[i * 3] = dr; delta[i * 3 + 1] = dg; delta[i * 3 + 2] = db;
+        dark[i] = Math.max(0, -(0.299 * dr + 0.587 * dg + 0.114 * db));
+      }
+    }
+    // Nur dünne Linien zählen: dunkler als die Pixel 4 Punkte quer dazu (Schatten, Tisch, Ränder fallen weg)
+    const thinH = new Float32Array(w * h), thinV = new Float32Array(w * h);
+    for (let y = 4; y < h - 4; y++) {
+      for (let x = 4; x < w - 4; x++) {
+        const i = y * w + x;
+        if (!dark[i]) continue;
+        thinH[i] = Math.max(0, dark[i] - Math.max(dark[i - 4 * w], dark[i + 4 * w]));
+        thinV[i] = Math.max(0, dark[i] - Math.max(dark[i - 4], dark[i + 4]));
+      }
+    }
+    const sH = lineSlope(thinH, w, h, false), sV = lineSlope(thinV, w, h, true);
+
+    // Erstes sauberes Pixel in Richtung (dx, dy) ab (x, y); Ergebnis: Index oder -1, Abstand in d
+    const walk = (x, y, dx, dy, out) => {
+      for (let j = 1; j < 4000; j++) {
+        const xx = Math.round(x + dx * j), yy = Math.round(y + dy * j);
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) return -1;
+        const i = yy * w + xx;
+        if (!hole[i]) { out.d = j; return i; }
+      }
+      return -1;
+    };
+    const A = { d: 0 }, B = { d: 0 };
+    // Linienanteil in einer Richtung: nur wenn beide Seiten dunkel sind (die Linie läuft durch)
+    // Dunkelheit einer Linie, die am Pixel in Richtung (dx, dy) weiterläuft: Minimum über 3 Punkte
+    // nach außen (eine querliegende Linie ist nach wenigen Pixeln zu Ende und zählt dann nicht)
+    const along = (x, y, dx, dy, d, map) => {
+      let m = 1e9, n = 0;
+      for (let k = d; k <= d + 12 && n < 4; k += 2) {
+        const xx = Math.round(x + dx * k), yy = Math.round(y + dy * k);
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) break;
+        const i = yy * w + xx;
+        if (hole[i]) continue; // nächstes Wort: überspringen
+        m = Math.min(m, map[i]);
+        n++;
+      }
+      return n >= 2 ? m : n === 1 ? m * 0.5 : 0;
+    };
+    const lineDelta = (x, y, dx, dy, map, acc) => {
+      const ia = walk(x, y, -dx, -dy, A), ib = walk(x, y, dx, dy, B);
+      if (ia < 0 || ib < 0) return;
+      const da = along(x, y, -dx, -dy, A.d, map), db = along(x, y, dx, dy, B.d, map);
+      if (da < 3 || db < 3) return;
+      const t = A.d / (A.d + B.d);
+      // Stärke durch die schwächere Seite begrenzen (sonst „bluten“ dunkle Kanten in die Lücke)
+      const f = Math.min(1, Math.min(da, db) / Math.max(da, db) * 1.5);
+      for (let c = 0; c < 3; c++) acc[c] += (delta[ia * 3 + c] * (1 - t) + delta[ib * 3 + c] * t) * f;
+    };
+    let seed = 12345;
+    const noise = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed / 0x7fffffff - 0.5) * 3; };
+    const nH = Math.hypot(1, sH), nV = Math.hypot(sV, 1);
+    const acc = [0, 0, 0];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (!hole[i]) continue;
+        acc[0] = acc[1] = acc[2] = 0;
+        lineDelta(x, y, 1 / nH, sH / nH, dark, acc);
+        lineDelta(x, y, sV / nV, 1 / nV, dark, acc);
+        const n = noise();
+        for (let c = 0; c < 3; c++) px[i * 4 + c] = Math.max(0, Math.min(255, paper(x, y, c) + acc[c] + n));
+        px[i * 4 + 3] = 255;
+      }
+    }
+  }
+
   // Quadratische Verbreiterung einer 0/1-Maske um r Pixel (zeilen- und spaltenweise)
   function dilate(mask, w, h, r) {
     const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
@@ -852,6 +1135,8 @@
       if (comp.length < minArea) for (const c of comp) mask[c] = 0;
     }
 
+    removePaperLines(mask, w, h);
+
     // Rand von 1 Pixel einplanen, den vectorize freihält
     const W = w + 2, H = h + 2;
     const alpha = new Uint8Array(W * H);
@@ -871,42 +1156,16 @@
       return { pts, w: s.w, color };
     });
 
-    // Bild ohne Tinte: Tinte samt weichem Rand (Unschärfe, JPEG) durch Papierfarbe ersetzen
+    // Bild ohne Tinte: Tinte samt weichem Rand (Unschärfe, JPEG) entfernen und die Lücke aus dem sauberen
+    // Papier daneben auffüllen – zeilenweise (Linien laufen durch), bei breiten Lücken auch spaltenweise
     const cleaned = document.createElement("canvas");
     cleaned.width = w;
     cleaned.height = h;
     const cctx = cleaned.getContext("2d");
     const out = cctx.createImageData(w, h);
     out.data.set(d);
-    const near = dilate(mask, w, h, 1);
-    const halo = dilate(mask, w, h, Math.max(3, Math.round(Math.max(w, h) / 450)));
-    // Papierfarbe neu schätzen: Mittel aller Pixel ohne Tinte (die hellere Hälfte wäre zu hell)
-    for (let by = 0; by < bh; by++) {
-      for (let bx = 0; bx < bw; bx++) {
-        let r = 0, g = 0, b = 0, l = 0, c = 0;
-        for (let y = by * B; y < Math.min(h, by * B + B); y++) {
-          for (let x = bx * B; x < Math.min(w, bx * B + B); x++) {
-            const i = y * w + x;
-            if (halo[i]) continue;
-            r += d[i * 4]; g += d[i * 4 + 1]; b += d[i * 4 + 2]; l += lum[i]; c++;
-          }
-        }
-        if (c < (B * B) / 8) continue; // zu wenig Papier im Block: alte Schätzung behalten
-        const o = (by * bw + bx) * 4;
-        bg[o] = r / c; bg[o + 1] = g / c; bg[o + 2] = b / c; bg[o + 3] = l / c;
-      }
-    }
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (!halo[i]) continue;
-        const o = i * 4;
-        const r = bgAt(x, y, 0), g = bgAt(x, y, 1), b = bgAt(x, y, 2);
-        // Am Rand nur ersetzen, was farblich spürbar vom Papier abweicht
-        if (!near[i] && Math.abs(d[o] - r) + Math.abs(d[o + 1] - g) + Math.abs(d[o + 2] - b) < 14) continue;
-        out.data[o] = r; out.data[o + 1] = g; out.data[o + 2] = b; out.data[o + 3] = 255;
-      }
-    }
+    const hole = dilate(mask, w, h, Math.max(3, Math.round(Math.max(w, h) / 300)));
+    fillHoles(out.data, hole, w, h);
     cctx.putImageData(out, 0, 0);
     return { strokes, cleaned };
   }
@@ -1035,7 +1294,7 @@
         ]);
         records.push([[7, "s", [
           [1, "s", id],
-          [2, "s", strokeGeometry(s.pts.map(([x, y]) => [x * k, y * k]), Math.max(0.3, s.w * k))],
+          [2, "s", strokeGeometry(densify(s.pts.map(([x, y]) => [x * k, y * k]), 6), Math.max(0.3, s.w * k))],
           [4, "s", colorMsg(toRgba(s.color || opts.ink))],
           [6, "s", ""],
           [7, "s", [[1, "s", stamp(1)]]],
@@ -1086,7 +1345,8 @@
   /**
    * Bilder (Canvas, Bild-Elemente) → Seiten für buildDocument.
    * opts.editable: true = dunkle Schrift wird zu bearbeitbaren Strichen, das Bild darunter ohne Schrift
-   * opts.contrast: siehe strokesFromCanvas; opts.onProgress(i, n): Fortschritt
+   * opts.contrast: siehe strokesFromCanvas; opts.sizesPt: Seitengröße in pt je Bild (Standard: A4-Breite)
+   * opts.onProgress(i, n): Fortschritt
    */
   async function fromImagesPages(images, opts = {}) {
     const pages = [];
@@ -1108,7 +1368,7 @@
         strokes = r.strokes;
         bgCanvas = r.cleaned;
       }
-      const sizePt = fitPt(w, h);
+      const sizePt = (opts.sizesPt && opts.sizesPt[i]) || fitPt(w, h);
       const jpeg = await canvasToJpeg(bgCanvas, opts.quality ?? 0.88);
       pages.push({
         strokes,
@@ -1116,6 +1376,9 @@
         sizePx: [w, h],
         background: { pdf: makePdf([{ wPt: sizePt[0], hPt: sizePt[1], jpeg, imgW: w, imgH: h }]), page: 1 },
       });
+      // Speicher sofort freigeben (Safari begrenzt den Canvas-Speicher)
+      if (bgCanvas !== flat) bgCanvas.width = bgCanvas.height = 0;
+      flat.width = flat.height = 0;
       await new Promise((r) => setTimeout(r, 0));
     }
     return pages;
