@@ -43,6 +43,11 @@
     <div class="row"><button id="drawBtn">Als Goodnotes-Datei</button></div>
   </section>
 
+  <section>
+    <h2>4. Alle Elemente (Text, Formen, Haftnotiz, Pfeile, Bild …)</h2>
+    <div class="row"><button id="allBtn">Als Goodnotes-Datei</button></div>
+  </section>
+
   <p class="status" id="status" role="status"></p>
 </main>
 
@@ -79,6 +84,23 @@
     say("Wird umgewandelt …");
     const images = await Promise.all(files.map(async (f) => { const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); return im; }));
     give(await G.fromImages(images, { editable: document.getElementById("editable").checked, title: "Bilder" }), "bilder.goodnotes");
+  });
+
+  document.getElementById("allBtn").addEventListener("click", async () => {
+    const c = document.createElement("canvas"); c.width = c.height = 40;
+    const x = c.getContext("2d"); x.fillStyle = "#d33"; x.fillRect(0, 0, 40, 40); x.fillStyle = "#fff"; x.fillRect(10, 10, 20, 20);
+    const png = new Uint8Array(await (await new Promise((r) => c.toBlob(r, "image/png"))).arrayBuffer());
+    const items = [
+      { type: "text", x: 40, y: 30, w: 515, h: 40, text: [{ text: "Alle Elemente: ", size: 22, bold: true, color: "#1d3a8a" }, { text: "Text, Formen, Pfeile", size: 22, italic: true }] },
+      { type: "highlighter", pts: [[40, 100], [300, 100]], w: 16, color: [1, 0.85, 0, 0.45] },
+      { type: "stroke", pts: Array.from({ length: 40 }, (_, i) => [40 + i * 6, 140 + Math.sin(i / 4) * 10]), w: 2, color: "#1d3a8a" },
+      { type: "shape", shape: "rect", radius: 12, x: 40, y: 180, w: 140, h: 80, fill: "#dbe9ff", outline: { width: 2, color: "#1d3a8a" }, text: "Form mit Text", size: 14 },
+      { type: "shape", shape: "ellipse", x: 200, y: 180, w: 140, h: 80, fill: "#ffe8d6", outline: { width: 2, color: "#c0392b" } },
+      { type: "line", from: [40, 300], via: [190, 260], to: [340, 300], endArrow: "open", w: 2, color: "#1565c0" },
+      { type: "sticky", x: 40, y: 330, w: 160, h: 120, text: "Haftnotiz" },
+      { type: "image", data: png, x: 230, y: 340, w: 100, h: 100, angle: 0.3 },
+    ];
+    give(await G.buildDocument([{ sizePt: [595.28, 841.89], items, outline: "Alle Elemente" }], { title: "Alle Elemente" }), "alle-elemente.goodnotes");
   });
 
   document.getElementById("drawBtn").addEventListener("click", async () => {
