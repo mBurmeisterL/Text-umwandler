@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>goodnotes-kit Demo</title>
+  <style>
+    :root { --bg: #f6f3ec; --text: #1f2430; --accent: #2340a0; --card: #fff; --border: #e3dccb; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #16181d; --text: #e8e8ea; --accent: #8fa8ff; --card: #20232a; --border: #343844; } }
+    body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+    section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin: 16px 0; }
+    h1 { font-size: 1.5rem; margin: 0 0 4px; }
+    h2 { font-size: 1.1rem; margin: 0 0 8px; }
+    button { font: inherit; padding: 10px 16px; border-radius: 999px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+    input[type=text] { font: inherit; width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: inherit; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    p.status { min-height: 1.5em; color: #2e7d32; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>goodnotes-kit</h1>
+  <p>Beispiele für <code>goodnotes.js</code>: Jede Schaltfläche erzeugt eine <code>.goodnotes</code>-Datei.</p>
+
+  <section>
+    <h2>1. Text als bearbeitbare Striche</h2>
+    <input type="text" id="text" value="Hallo Goodnotes!">
+    <div class="row"><button id="textBtn">Als Goodnotes-Datei</button></div>
+  </section>
+
+  <section>
+    <h2>2. Bilder → Goodnotes</h2>
+    <input type="file" id="images" accept="image/*" multiple>
+    <div class="row">
+      <label><input type="checkbox" id="editable"> Schrift im Bild bearbeitbar machen</label>
+      <button id="imgBtn">Als Goodnotes-Datei</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Eigene Striche (Spirale)</h2>
+    <div class="row"><button id="drawBtn">Als Goodnotes-Datei</button></div>
+  </section>
+
+  <p class="status" id="status" role="status"></p>
+</main>
+
+<script src="goodnotes.js"></script>
+<script>
+  const G = window.GoodnotesExport;
+  const say = (t) => { document.getElementById("status").textContent = t; };
+
+  async function give(blob, name) {
+    const file = new File([blob], name, { type: "application/octet-stream" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); say("Geteilt."); return; } catch (e) { if (e.name === "AbortError") return; }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    say(`„${name}“ heruntergeladen – in Goodnotes importieren.`);
+  }
+
+  document.getElementById("textBtn").addEventListener("click", async () => {
+    const rec = G.createRecorder();
+    rec.font = '64px "Comic Sans MS", "Chalkboard SE", cursive';
+    rec.fillText(document.getElementById("text").value, 120, 250);
+    const strokes = G.strokesFromOps(rec.ops);
+    give(await G.buildDocument([{ strokes, sizePx: [1240, 1754] }], { ink: "#1d3a8a", title: "Text" }), "text.goodnotes");
+  });
+
+  document.getElementById("imgBtn").addEventListener("click", async () => {
+    const files = [...document.getElementById("images").files];
+    if (!files.length) { say("Bitte zuerst Bilder auswählen."); return; }
+    say("Wird umgewandelt …");
+    const images = await Promise.all(files.map(async (f) => { const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); return im; }));
+    give(await G.fromImages(images, { editable: document.getElementById("editable").checked, title: "Bilder" }), "bilder.goodnotes");
+  });
+
+  document.getElementById("drawBtn").addEventListener("click", async () => {
+    const pts = [];
+    for (let t = 0; t < 40; t += 0.05) pts.push([297 + Math.cos(t) * t * 6, 420 + Math.sin(t) * t * 6]);
+    const strokes = [{ pts, w: 3, color: "#c0392b" }, { pts: [[60, 760], [535, 760]], w: 6, color: "#2340a0" }];
+    give(await G.buildDocument([{ strokes, sizePt: [595.28, 841.89] }], { title: "Spirale" }), "spirale.goodnotes");
+  });
+</script>
+</body>
+</html>

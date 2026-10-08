@@ -1,9 +1,16 @@
-// Export als Goodnotes-Datei (.goodnotes): die Schrift wird zu echten Kugelschreiber-Strichen,
-// die sich in Goodnotes radieren, mit dem Lasso verschieben und umfärben lassen.
-// Das Papier liegt als PDF-Hintergrund darunter.
+// goodnotes-kit – .goodnotes-Dateien im Browser erzeugen (ohne Server, ohne weitere Bibliotheken)
+//
+// Was es kann:
+//   - Striche (Kugelschreiber) schreiben, die in Goodnotes radierbar und mit dem Lasso verschiebbar sind
+//   - Seiten mit Hintergrund: PDF-Seiten (bleiben scharf) oder Bilder
+//   - Schrift aus Fotos/Scans in bearbeitbare Striche umwandeln (strokesFromCanvas)
+//   - Canvas-Zeichnungen (fillText, drawImage) aufzeichnen und in Striche umwandeln (createRecorder)
+//   - kleine PDFs aus JPEGs bauen (makePdf)
+// Benutzung und Beispiele: README.md in diesem Ordner. Alles hängt an window.GoodnotesExport.
 //
 // Das Dateiformat ist nicht offiziell dokumentiert; der Aufbau folgt Dateien aus der Goodnotes-App
 // und der Beschreibung in https://github.com/Taylor-Nilsen/goodnotes-codec (docs/FORMAT.md).
+// Getestet: Import in Goodnotes auf dem iPad (Oktober 2026), Schema-Version 24.
 (() => {
   "use strict";
 
@@ -708,36 +715,239 @@
     return new Blob([...local, cd, end], { type: "application/zip" });
   }
 
+  // ---------- Kleine PDFs ohne weitere Bibliothek ----------
+
+  /**
+   * Baut ein PDF aus Seiten: [{ wPt, hPt, jpeg?: Uint8Array, imgW?, imgH? }].
+   * Seiten ohne jpeg bleiben weiß. Das JPEG wird unverändert eingebettet.
+   */
+  function makePdf(pages) {
+    const objs = []; // Index = Objektnummer - 1
+    const add = (parts) => { objs.push(parts); return objs.length; };
+    const catalog = add(null), pagesObj = add(null);
+    const kids = [];
+    for (const pg of pages) {
+      const w = +pg.wPt.toFixed(2), h = +pg.hPt.toFixed(2);
+      let res = "<< >>", content = "";
+      if (pg.jpeg) {
+        const im = add([`<< /Type /XObject /Subtype /Image /Width ${pg.imgW} /Height ${pg.imgH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.jpeg.length} >>\nstream\n`, pg.jpeg, "\nendstream"]);
+        res = `<< /XObject << /Im0 ${im} 0 R >> >>`;
+        content = `q ${w} 0 0 ${h} 0 0 cm /Im0 Do Q`;
+      }
+      const cs = add([`<< /Length ${content.length} >>\nstream\n${content}\nendstream`]);
+      kids.push(add([`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 ${w} ${h}] /Resources ${res} /Contents ${cs} 0 R >>`]));
+    }
+    objs[catalog - 1] = [`<< /Type /Catalog /Pages ${pagesObj} 0 R >>`];
+    objs[pagesObj - 1] = [`<< /Type /Pages /Kids [${kids.map((k) => k + " 0 R").join(" ")}] /Count ${kids.length} >>`];
+    const chunks = [enc.encode("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n")];
+    let offset = chunks[0].length;
+    const offsets = [];
+    objs.forEach((parts, i) => {
+      offsets.push(offset);
+      const piece = concat([enc.encode(`${i + 1} 0 obj\n`), ...parts.map((x) => (typeof x === "string" ? enc.encode(x) : x)), enc.encode("\nendobj\n")]);
+      chunks.push(piece);
+      offset += piece.length;
+    });
+    const xref = ["xref", `0 ${objs.length + 1}`, "0000000000 65535 f "]
+      .concat(offsets.map((o) => String(o).padStart(10, "0") + " 00000 n "))
+      .join("\n");
+    chunks.push(enc.encode(`${xref}\ntrailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${offset}\n%%EOF\n`));
+    return concat(chunks);
+  }
+
+  async function canvasToJpeg(canvas, quality = 0.9) {
+    const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", quality));
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  // ---------- Schrift aus Fotos/Scans → Striche ----------
+
+  // Quadratische Verbreiterung einer 0/1-Maske um r Pixel (zeilen- und spaltenweise)
+  function dilate(mask, w, h, r) {
+    const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      let last = -1e9;
+      for (let x = 0; x < w; x++) { if (mask[y * w + x]) last = x; if (x - last <= r) tmp[y * w + x] = 1; }
+      last = 1e9;
+      for (let x = w - 1; x >= 0; x--) { if (mask[y * w + x]) last = x; if (last - x <= r) tmp[y * w + x] = 1; }
+    }
+    for (let x = 0; x < w; x++) {
+      let last = -1e9;
+      for (let y = 0; y < h; y++) { if (tmp[y * w + x]) last = y; if (y - last <= r) out[y * w + x] = 1; }
+      last = 1e9;
+      for (let y = h - 1; y >= 0; y--) { if (tmp[y * w + x]) last = y; if (last - y <= r) out[y * w + x] = 1; }
+    }
+    return out;
+  }
+
+  /**
+   * Findet dunkle Tinte (Schrift, Zeichnungen) in einem Bild und macht daraus Striche.
+   * Gibt { strokes: [{pts, w, color}], cleaned: Canvas ohne Tinte } in Pixeln des Bildes zurück.
+   * opts.contrast: wie viel dunkler als das Papier ein Pixel sein muss (0..1, Standard 0.28)
+   */
+  function strokesFromCanvas(canvas, opts = {}) {
+    const w = canvas.width, h = canvas.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const src = ctx.getImageData(0, 0, w, h);
+    const d = src.data;
+    const lum = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) lum[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+
+    // Papierfarbe je Block: Mittel der helleren Hälfte, dann weich interpoliert
+    const B = 32, bw = Math.ceil(w / B), bh = Math.ceil(h / B);
+    const bg = new Float32Array(bw * bh * 4);
+    for (let by = 0; by < bh; by++) {
+      for (let bx = 0; bx < bw; bx++) {
+        let sum = 0, n = 0;
+        for (let y = by * B; y < Math.min(h, by * B + B); y++) for (let x = bx * B; x < Math.min(w, bx * B + B); x++) { sum += lum[y * w + x]; n++; }
+        const mean = sum / n;
+        let r = 0, g = 0, b = 0, l = 0, c = 0;
+        for (let y = by * B; y < Math.min(h, by * B + B); y++) {
+          for (let x = bx * B; x < Math.min(w, bx * B + B); x++) {
+            const i = y * w + x;
+            if (lum[i] < mean) continue;
+            r += d[i * 4]; g += d[i * 4 + 1]; b += d[i * 4 + 2]; l += lum[i]; c++;
+          }
+        }
+        const o = (by * bw + bx) * 4;
+        bg[o] = r / c; bg[o + 1] = g / c; bg[o + 2] = b / c; bg[o + 3] = l / c;
+      }
+    }
+    const bgAt = (x, y, ch) => {
+      const fx = Math.min(bw - 1, Math.max(0, x / B - 0.5)), fy = Math.min(bh - 1, Math.max(0, y / B - 0.5));
+      const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(bw - 1, x0 + 1), y1 = Math.min(bh - 1, y0 + 1);
+      const tx = fx - x0, ty = fy - y0;
+      const v = (xx, yy) => bg[(yy * bw + xx) * 4 + ch];
+      return (v(x0, y0) * (1 - tx) + v(x1, y0) * tx) * (1 - ty) + (v(x0, y1) * (1 - tx) + v(x1, y1) * tx) * ty;
+    };
+
+    const contrast = opts.contrast ?? 0.28;
+    const mask = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const p = bgAt(x, y, 3);
+        if (p - lum[i] > Math.max(35, p * contrast)) mask[i] = 1;
+      }
+    }
+    // Einzelne Staubkörner entfernen
+    const minArea = opts.minArea ?? Math.max(4, Math.round((w * h) / 400000));
+    const seen = new Uint8Array(w * h);
+    const stack = [];
+    for (let i = 0; i < w * h; i++) {
+      if (!mask[i] || seen[i]) continue;
+      const comp = [];
+      stack.push(i);
+      seen[i] = 1;
+      while (stack.length) {
+        const c = stack.pop();
+        comp.push(c);
+        const cx = c % w;
+        for (const n of [c - w, c + w, cx > 0 ? c - 1 : -1, cx < w - 1 ? c + 1 : -1, c - w - 1, c - w + 1, c + w - 1, c + w + 1]) {
+          if (n < 0 || n >= w * h || !mask[n] || seen[n]) continue;
+          seen[n] = 1;
+          stack.push(n);
+        }
+      }
+      if (comp.length < minArea) for (const c of comp) mask[c] = 0;
+    }
+
+    // Rand von 1 Pixel einplanen, den vectorize freihält
+    const W = w + 2, H = h + 2;
+    const alpha = new Uint8Array(W * H);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x]) alpha[(y + 1) * W + x + 1] = 255;
+    const raw = vectorize(alpha, W, H);
+
+    const strokes = raw.map((s) => {
+      const pts = s.pts.map(([x, y]) => [x - 1, y - 1]);
+      // Farbe: Mittel der Bildpunkte entlang des Strichs
+      let r = 0, g = 0, b = 0, n = 0;
+      for (const [x, y] of pts) {
+        const i = Math.min(h - 1, Math.max(0, Math.round(y - 0.5))) * w + Math.min(w - 1, Math.max(0, Math.round(x - 0.5)));
+        if (!mask[i]) continue;
+        r += d[i * 4]; g += d[i * 4 + 1]; b += d[i * 4 + 2]; n++;
+      }
+      const color = n ? [r / n / 255, g / n / 255, b / n / 255, 1] : [0, 0, 0, 1];
+      return { pts, w: s.w, color };
+    });
+
+    // Bild ohne Tinte: Tinte samt weichem Rand (Unschärfe, JPEG) durch Papierfarbe ersetzen
+    const cleaned = document.createElement("canvas");
+    cleaned.width = w;
+    cleaned.height = h;
+    const cctx = cleaned.getContext("2d");
+    const out = cctx.createImageData(w, h);
+    out.data.set(d);
+    const near = dilate(mask, w, h, 1);
+    const halo = dilate(mask, w, h, Math.max(3, Math.round(Math.max(w, h) / 450)));
+    // Papierfarbe neu schätzen: Mittel aller Pixel ohne Tinte (die hellere Hälfte wäre zu hell)
+    for (let by = 0; by < bh; by++) {
+      for (let bx = 0; bx < bw; bx++) {
+        let r = 0, g = 0, b = 0, l = 0, c = 0;
+        for (let y = by * B; y < Math.min(h, by * B + B); y++) {
+          for (let x = bx * B; x < Math.min(w, bx * B + B); x++) {
+            const i = y * w + x;
+            if (halo[i]) continue;
+            r += d[i * 4]; g += d[i * 4 + 1]; b += d[i * 4 + 2]; l += lum[i]; c++;
+          }
+        }
+        if (c < (B * B) / 8) continue; // zu wenig Papier im Block: alte Schätzung behalten
+        const o = (by * bw + bx) * 4;
+        bg[o] = r / c; bg[o + 1] = g / c; bg[o + 2] = b / c; bg[o + 3] = l / c;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (!halo[i]) continue;
+        const o = i * 4;
+        const r = bgAt(x, y, 0), g = bgAt(x, y, 1), b = bgAt(x, y, 2);
+        // Am Rand nur ersetzen, was farblich spürbar vom Papier abweicht
+        if (!near[i] && Math.abs(d[o] - r) + Math.abs(d[o + 1] - g) + Math.abs(d[o + 2] - b) < 14) continue;
+        out.data[o] = r; out.data[o + 1] = g; out.data[o + 2] = b; out.data[o + 3] = 255;
+      }
+    }
+    cctx.putImageData(out, 0, 0);
+    return { strokes, cleaned };
+  }
+
   // ---------- Dokument zusammenbauen ----------
 
   // Goodnotes rechnet in Einheiten von 1/1,8333 pt (A4 = 1091,35 × 1543,46)
   const GN_PER_PT = 11 / 6;
   const DEFAULT_COVER = "5A53E89E-F4C2-4548-8DD3-E9DF9FB4592E";
+  const A4 = [595.28, 841.89];
+
+  const toRgba = (c) => (Array.isArray(c) ? (c.length === 4 ? c : [...c, 1]) : color(c || "#000000"));
 
   /**
-   * pages: [{ strokes: [{pts: [[x, y], ...], w}] }] in Seitenpixeln
-   * opts: { pagePx: [w, h], pagePt: [w, h], ink: "#rrggbb", background: Uint8Array (PDF, 1 Seite),
-   *         thumbnail: Uint8Array (JPEG) | null, title }
+   * Baut eine .goodnotes-Datei (Blob).
+   *
+   * pages: [{
+   *   strokes:    [{ pts: [[x, y], ...], w, color? }]  – Koordinaten in sizePx der Seite, w = Strichbreite
+   *   sizePt:     [Breite, Höhe] in pt (Standard: opts.pagePt oder A4)
+   *   sizePx:     [Breite, Höhe] des Koordinatensystems der Striche (Standard: opts.pagePx oder sizePt)
+   *   background: { pdf: Uint8Array, page: 1 }  – Seite eines PDFs als Hintergrund (Standard: weiß)
+   * }]
+   * opts: { title, ink (Standardfarbe, "#rrggbb"), thumbnail (JPEG-Bytes), language ("de_DE"),
+   *         pagePt, pagePx, background (PDF-Bytes für alle Seiten) }
    */
-  async function buildDocument(pages, opts) {
-    const [pwPt, phPt] = opts.pagePt;
-    const gnW = pwPt * GN_PER_PT, gnH = phPt * GN_PER_PT;
-    const k = gnW / opts.pagePx[0];
+  async function buildDocument(pages, opts = {}) {
     const device = BigInt.asUintN(63, (BigInt(rnd32()) << 32n) | BigInt(rnd32()));
     let clock = Date.now() - 1000;
     const tick = () => ++clock;
     let seq = 0;
     const docId = uuid();
-    const ink = color(opts.ink);
     const time = () => Date.now() + Math.random();
 
     const files = [];
     const events = [];
+    const attIndex = [];
 
     // Dokument
     events.push([[1, "s", docId], [30, "s", [
       [1, "s", docId],
-      [2, "s", [[1, "s", opts.title || "Handschrift"], [2, "s", stamp()]]],
+      [2, "s", [[1, "s", opts.title || "Dokument"], [2, "s", stamp()]]],
       // Standard-Umschlag und -Papier, wie in allen Goodnotes-Dateien
       [3, "s", [[1, "s", DEFAULT_COVER], [2, "s", stamp()]]],
       [6, "s", [[1, "s", "P"], [2, "s", stamp()]]],
@@ -749,28 +959,57 @@
       [20, "v", 24],
     ]]]);
 
-    // Papier als PDF-Anhang und eine Papier-Ebene, die alle Seiten benutzen
-    const attId = uuid();
-    files.push([`attachments/${attId}`, opts.background]);
-    events.push([[1, "s", attId], [6, "s", [
-      [1, "s", attId], [2, "s", attId], [5, "v", opts.background.length], [6, "s", docId],
-      [10, "d", time()], [11, "s", uuid()], [12, "s", ""], [14, "v", device], [15, "v", tick()], [16, "v", 24],
-    ]]]);
-    const layerId = uuid();
-    events.push([[1, "s", layerId], [2, "s", [
-      [1, "s", docId], [2, "s", layerId], [4, "s", attId], [5, "v", 1],
-      [8, "s", [[1, "f", gnW], [2, "f", gnH]]],
-      [10, "d", time()], [11, "s", uuid()],
-      [12, "s", [[2, "s", stamp()]]], [13, "s", [[2, "s", stamp()]]],
-      [15, "v", device], [16, "v", tick()],
-      [17, "s", [[2, "s", stamp()]]], [19, "s", [[2, "s", stamp()]]],
-      [21, "v", 24],
-    ]]]);
+    // Anhänge (PDFs) nur einmal speichern, Papier-Ebenen je Hintergrund und Größe nur einmal anlegen
+    const attachments = new Map();
+    const attachment = (bytes) => {
+      if (attachments.has(bytes)) return attachments.get(bytes);
+      const id = uuid();
+      attachments.set(bytes, id);
+      files.push([`attachments/${id}`, bytes]);
+      attIndex.push([[1, "s", id], [2, "s", `attachments/${id}`]]);
+      events.push([[1, "s", id], [6, "s", [
+        [1, "s", id], [2, "s", id], [5, "v", bytes.length], [6, "s", docId],
+        [10, "d", time()], [11, "s", uuid()], [12, "s", ""], [14, "v", device], [15, "v", tick()], [16, "v", 24],
+      ]]]);
+      return id;
+    };
+    const layers = new Map();
+    const blanks = new Map();
+    const layer = (bg, sizePt) => {
+      let pdf = bg && bg.pdf, pdfPage = (bg && bg.page) || 1;
+      if (!pdf) {
+        const key = sizePt.join("x");
+        if (!blanks.has(key)) blanks.set(key, makePdf([{ wPt: sizePt[0], hPt: sizePt[1] }]));
+        pdf = blanks.get(key);
+        pdfPage = 1;
+      }
+      const attId = attachment(pdf);
+      const key = `${attId}|${pdfPage}|${sizePt.join("x")}`;
+      if (layers.has(key)) return layers.get(key);
+      const id = uuid();
+      layers.set(key, id);
+      events.push([[1, "s", id], [2, "s", [
+        [1, "s", docId], [2, "s", id], [4, "s", attId], [5, "v", pdfPage],
+        [8, "s", [[1, "f", sizePt[0] * GN_PER_PT], [2, "f", sizePt[1] * GN_PER_PT]]],
+        [10, "d", time()], [11, "s", uuid()],
+        [12, "s", [[2, "s", stamp()]]], [13, "s", [[2, "s", stamp()]]],
+        [15, "v", device], [16, "v", tick()],
+        [17, "s", [[2, "s", stamp()]]], [19, "s", [[2, "s", stamp()]]],
+        [21, "v", 24],
+      ]]]);
+      return id;
+    };
 
     const notesIndex = [];
     let key = "";
-    let lastPageId = null;
-    pages.forEach((page) => {
+    let firstPageId = null;
+    for (const page of pages) {
+      const sizePt = page.sizePt || opts.pagePt || A4;
+      const sizePx = page.sizePx || opts.pagePx || sizePt;
+      const bg = page.background || (opts.background ? { pdf: opts.background, page: 1 } : null);
+      const layerId = layer(bg, sizePt);
+      const k = (sizePt[0] * GN_PER_PT) / sizePx[0];
+
       const pageId = uuid();
       const notesId = uuidPlusOne(pageId);
       key = keyAfter(key);
@@ -784,10 +1023,10 @@
         [1, "s", notesId], [10, "d", time()], [11, "s", uuid()], [13, "v", device], [14, "v", tick()],
         [15, "v", 24], [16, "s", docId],
       ]]]);
-      lastPageId = lastPageId || pageId;
+      firstPageId = firstPageId || pageId;
 
       const records = [];
-      for (const s of page.strokes) {
+      for (const s of page.strokes || []) {
         if (!s.pts.length) continue;
         const id = uuid();
         const st = stamp(2);
@@ -797,7 +1036,7 @@
         records.push([[7, "s", [
           [1, "s", id],
           [2, "s", strokeGeometry(s.pts.map(([x, y]) => [x * k, y * k]), Math.max(0.3, s.w * k))],
-          [4, "s", colorMsg(ink)],
+          [4, "s", colorMsg(toRgba(s.color || opts.ink))],
           [6, "s", ""],
           [7, "s", [[1, "s", stamp(1)]]],
           [9, "s", ""],
@@ -808,10 +1047,10 @@
       }
       notesIndex.push([[1, "s", notesId], [2, "s", `notes/${notesId}`]]);
       files.push([`notes/${notesId}`, delimited(records)]);
-    });
+    }
     // Zuletzt angesehene Seite: die erste
     events.push([[1, "s", docId], [10, "s", [
-      [1, "s", docId], [2, "s", lastPageId], [3, "s", `PagingViewServiceUpdater:${uuid()}`],
+      [1, "s", docId], [2, "s", firstPageId], [3, "s", `PagingViewServiceUpdater:${uuid()}`],
       [10, "d", time()], [11, "s", uuid()], [13, "v", device], [14, "v", tick()], [15, "v", 24],
     ]]]);
 
@@ -822,7 +1061,7 @@
       ["index.events.pb", delimited(events)],
     ];
     if (opts.thumbnail) out.push(["thumbnail.jpg", opts.thumbnail]);
-    out.push(["index.attachments.pb", delimited([[[1, "s", attId], [2, "s", `attachments/${attId}`]]])]);
+    out.push(["index.attachments.pb", delimited(attIndex)]);
     out.push(...files.filter(([n]) => n.startsWith("attachments/")));
     out.push(["schema.pb", Uint8Array.from([0x08, 0x18])]);
     return zip(out);
@@ -835,5 +1074,91 @@
     return out;
   }
 
-  window.GoodnotesExport = { createRecorder, strokesFromOps, buildDocument, vectorize };
+  // ---------- Bequeme Wege: Bilder / PDF → Goodnotes ----------
+
+  // Seitengröße in pt für ein Bild: auf A4-Breite (Hochformat) bzw. A4-Höhe (Querformat) skaliert
+  function fitPt(wPx, hPx) {
+    const portrait = hPx >= wPx;
+    const long = A4[1], short = A4[0];
+    return portrait ? [short, (short * hPx) / wPx] : [long, (long * hPx) / wPx];
+  }
+
+  /**
+   * Bilder (Canvas, Bild-Elemente) → Seiten für buildDocument.
+   * opts.editable: true = dunkle Schrift wird zu bearbeitbaren Strichen, das Bild darunter ohne Schrift
+   * opts.contrast: siehe strokesFromCanvas; opts.onProgress(i, n): Fortschritt
+   */
+  async function fromImagesPages(images, opts = {}) {
+    const pages = [];
+    for (let i = 0; i < images.length; i++) {
+      if (opts.onProgress) opts.onProgress(i, images.length);
+      const src = images[i];
+      const w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
+      // Weißer Untergrund für transparente Bilder
+      const flat = document.createElement("canvas");
+      flat.width = w;
+      flat.height = h;
+      const fx = flat.getContext("2d");
+      fx.fillStyle = "#fff";
+      fx.fillRect(0, 0, w, h);
+      fx.drawImage(src, 0, 0, w, h);
+      let strokes = [], bgCanvas = flat;
+      if (opts.editable) {
+        const r = strokesFromCanvas(flat, opts);
+        strokes = r.strokes;
+        bgCanvas = r.cleaned;
+      }
+      const sizePt = fitPt(w, h);
+      const jpeg = await canvasToJpeg(bgCanvas, opts.quality ?? 0.88);
+      pages.push({
+        strokes,
+        sizePt,
+        sizePx: [w, h],
+        background: { pdf: makePdf([{ wPt: sizePt[0], hPt: sizePt[1], jpeg, imgW: w, imgH: h }]), page: 1 },
+      });
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    return pages;
+  }
+
+  /** Bilder → .goodnotes (Blob). Optionen wie fromImagesPages, dazu title, language. */
+  async function fromImages(images, opts = {}) {
+    const pages = await fromImagesPages(images, opts);
+    let thumbnail = null;
+    if (images.length) {
+      const t = document.createElement("canvas");
+      const src = images[0];
+      const w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
+      t.width = 300;
+      t.height = Math.max(1, Math.round((300 * h) / w));
+      const tx = t.getContext("2d");
+      tx.fillStyle = "#fff";
+      tx.fillRect(0, 0, t.width, t.height);
+      tx.drawImage(src, 0, 0, t.width, t.height);
+      thumbnail = await canvasToJpeg(t, 0.7);
+    }
+    return buildDocument(pages, { title: opts.title, thumbnail, language: opts.language });
+  }
+
+  /**
+   * PDF → .goodnotes. Ohne „editable“ bleibt das PDF unverändert (scharfe Schrift) als Hintergrund.
+   * pdfBytes: Uint8Array; pageSizes: [[wPt, hPt], ...] (z. B. von PDF.js);
+   * renderPage(i) → Canvas der Seite i (nur für opts.editable nötig)
+   */
+  async function fromPdf(pdfBytes, pageSizes, opts = {}, renderPage) {
+    if (opts.editable && renderPage) {
+      const canvases = [];
+      for (let i = 0; i < pageSizes.length; i++) canvases.push(await renderPage(i));
+      return fromImages(canvases, opts);
+    }
+    const pages = pageSizes.map((sizePt, i) => ({ strokes: [], sizePt, background: { pdf: pdfBytes, page: i + 1 } }));
+    return buildDocument(pages, { title: opts.title, language: opts.language, thumbnail: opts.thumbnail });
+  }
+
+  window.GoodnotesExport = {
+    // Handschrift-Umwandler
+    createRecorder, strokesFromOps,
+    // allgemein
+    buildDocument, fromImages, fromImagesPages, fromPdf, strokesFromCanvas, vectorize, makePdf, canvasToJpeg,
+  };
 })();
