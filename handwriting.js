@@ -215,6 +215,8 @@
       if (t) ctx.drawImage(t, ox + v.bx * em, oy + v.by * em, v.bw * em, v.bh * em);
       return;
     }
+    // Goodnotes-Export: Striche als Vektoren übernehmen statt sie zu zeichnen
+    if (ctx.recordStrokes) { ctx.recordStrokes(v.s, em, penWidth, ox, oy, strokeWidth); return; }
     ctx.strokeStyle = ctx.fillStyle;
     drawStrokes(ctx, v.s, em, penWidth, ox, oy);
   }
